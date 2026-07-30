@@ -1,0 +1,9 @@
+buic
+*.old
+.build
+*.dll
+*.a
+*.lib
+*.so
+*.dylib
+*.exe
