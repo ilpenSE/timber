@@ -1,5 +1,4 @@
-#define TIMBER_IMPLEMENTATION
-#include "../timber.hpp"
+#include <timber.hpp>
 
 int main() {
   timber::Timber inst(TIMBER_BLOCK_POLICY);

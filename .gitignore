@@ -1,6 +1,9 @@
 buic
 *.old
 .build
+build
+build-*
+build_*
 *.dll
 *.a
 *.lib

@@ -1,5 +1,4 @@
-#define TIMBER_IMPLEMENTATION
-#include "../timber.h"
+#include <timber.h>
 #include <time.h>
 #include <inttypes.h>
 
