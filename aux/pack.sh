@@ -13,8 +13,7 @@ declare -A TARGETS=( ["mingw"]="win-mingw"
                      ["darwin"]="darwin-clang"
                      ["osx"]="darwin-clang"
                      ["apple"]="darwin-clang"
-                     ["linux"]="linux-gcc"
-                     ["all"]="all" )
+                     ["linux"]="linux-gcc" )
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,6 +21,8 @@ while [[ $# -gt 0 ]]; do
     --target | -t)
       if [[ -v TARGETS[$2] ]]; then
         TARGET="${TARGETS[$2]}"
+      elif [[ $2 == "all" ]]; then
+        TARGET="all"
       else
         echo "Invalid target: '$2', defaulting to linux"
         echo "Available targets:"
@@ -99,17 +100,6 @@ pack_for() {
         "$platform"
   fi
 }
-
-# pack_for() {
-#   bash "${CWD}/generate.sh"
-#   build_folder="${BUILD_FOLDER}$1"
-#   files="$(realpath --relative-to="$BUILD_FOLDER" \
-#        $(find "$build_folder" -maxdepth 1 -type f \( -name '*.so' -o -name '*.dll' -o -name '*.a' \
-#        -o -name '*.dylib' -o -name '*.lib' \)))"
-#   tar -C "$BUILD_FOLDER" \
-#     -czf "${BUILD_FOLDER}/$1.tar.gz" \
-#     $files
-# }
 
 if [[ $TARGET == "all" ]]; then
   for platform in "${PLATFORMS[@]}"; do

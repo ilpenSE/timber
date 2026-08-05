@@ -185,8 +185,8 @@ static inline bool timber_pthread_create(timber_pthread_t *thread,
                                     void *arg)
 { return pthread_create(thread, attr, start_routine, arg) == 0; }
 
-static inline bool timber_pthread_join(timber_pthread_t thread, void **retval)
-{ return pthread_join(thread, retval) == 0; }
+static inline bool timber_pthread_join(timber_pthread_t *thread, void **retval)
+{ return pthread_join(*thread, retval) == 0; }
 #endif // _WIN32
 
 struct TimberPayload {
@@ -420,7 +420,7 @@ bool timber_destroy(Timber *lg) {
     return false;
   }
   void *thread_retval;
-  if (!timber_pthread_join(lg->thread, &thread_retval)) {
+  if (!timber_pthread_join(&lg->thread, &thread_retval)) {
     _timber_report_error("pthread_join");
     return false;
   }
