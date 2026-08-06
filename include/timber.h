@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdarg.h>
 
 // C/C++ version checking
@@ -125,10 +126,19 @@ TIMBER_API void timber_set_format(Timber *lg, const char *format);
   - timber_leveln -> timber_logn
 */
 
-#define X(lower, upper)                                                                          \
-static inline bool timber_##lower##f(Timber *lg, const char *fmt, ...) TIMBER_PRINTF_LIKE(2, 3); \
-static inline bool timber_##lower(Timber *lg, const char *msg);                                  \
-static inline bool timber_##lower##n(Timber *lg, const char *msg, size_t msgsz);
+#define X(lower, upper)                                                           \
+static inline bool timber_##lower##f(Timber *lg, const char *fmt, ...) {          \
+  va_list args; va_start(args, fmt);                                              \
+  bool ok = timber_vlogf(lg, TIMBER_##upper, fmt, args);                          \
+  va_end(args);                                                                   \
+  return ok;                                                                      \
+}                                                                                 \
+static inline bool timber_##lower(Timber *lg, const char *msg) {                  \
+  return timber_logn(lg, TIMBER_##upper, msg, strlen(msg));                       \
+}                                                                                 \
+static inline bool timber_##lower##n(Timber *lg, const char *msg, size_t msgsz) { \
+  return timber_logn(lg, TIMBER_##upper, msg, msgsz);                             \
+}
 TIMBER_LEVELS
 #undef X
 

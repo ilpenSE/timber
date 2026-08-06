@@ -7,13 +7,11 @@ set -e
 
 RELEASE=0
 ARCH="x64"
-TARGET="linux-gcc"
-declare -A TARGETS=( ["mingw"]="win-mingw"
-                     ["msvc"]="win-msvc"
-                     ["darwin"]="darwin-clang"
-                     ["osx"]="darwin-clang"
-                     ["apple"]="darwin-clang"
-                     ["linux"]="linux-gcc" )
+TARGET="linux"
+declare -A TARGETS=( ["linux"]="linux"
+                     ["osx"]="osx"
+                     ["msvc"]="msvc"
+                     ["mingw"]="mingw" )
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,15 +25,15 @@ while [[ $# -gt 0 ]]; do
         echo "Invalid target: '$2', defaulting to linux"
         echo "Available targets:"
         echo "For Linux (GCC): linux"
-        echo "For Apple's OS (MacOS/OSX) (Clang): darwin or apple or osx"
-        echo "For Windows (MinGW): mingw"
-        echo "For Windows (MSVC): msvc"
+        echo "For MacOS (OSXCross): osx"
+        echo "For Windows (LLVM MinGW): mingw"
+        echo "For Windows (MSVC Wine): msvc"
       fi
       ;;
     --arch | -a)
       case "$2" in
         x64 | x86_64 | amd64) ARCH="x64" ;;
-        arm64 | aarch64) ARCH="arm64" ;;
+        arm64 | aarch64) ARCH="aarch64" ;;
         *)
           echo "Invalid architecture: '$2', defaulting to x64..."
           echo "Available options:"
@@ -49,39 +47,49 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+bash_clr_red='\e[0;32m'
+bash_clr_rst='\e[0m'
+
+info() {
+  echo -e "${bash_clr_red}==> [INFO] ${bash_clr_rst}$1"
+}
+
 CWD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$CWD")"
 BUILD_FOLDER="$PROJECT_ROOT/build/"
 
-PLATFORMS=( "${TARGETS[@]/#/${ARCH}-}" )
-PLATFORM=${ARCH}-$TARGET
+PRESETS=( "${TARGETS[@]/%/-${ARCH}}" )
+PRESET=${TARGET}-$ARCH
 bash "${CWD}/generate.sh"
 
-# build_for <platform = x64-linux-gcc>
+# build_for <preset = linux-x64>
 build_for() {
-  build_folder="${BUILD_FOLDER}$1"
-  toolchain_file="${PROJECT_ROOT}/toolchains/$1.cmake"
-  config=Debug
+  local preset="$1"
+  local build_folder="${BUILD_FOLDER}${preset}"
+  local config=Debug
   [[ $RELEASE == 1 ]] && config=Release
 
+  info "Building for preset: $preset"
+  info "Building into: $build_folder"
+  info "Config type: $config"
   cmake -B "$build_folder" -S "$PROJECT_ROOT" \
-        -DCMAKE_TOOLCHAIN_FILE="$toolchain_file" \
+        --preset "$preset" \
         -DCMAKE_BUILD_TYPE="$config"
-  cmake --build "$build_folder" --config "$config"
+  cmake --build "$build_folder" --preset "$preset"
 }
 
-# pack_for <platform = x64-linux-gcc>
+# pack_for <preset = linux-x64>
 pack_for() {
-  local platform="$1"
-  local build_folder="${BUILD_FOLDER}${platform}"
-  local stage="${BUILD_FOLDER}/stage/${platform}"
+  local preset="$1"
+  local build_folder="${BUILD_FOLDER}${preset}"
+  local stage="${BUILD_FOLDER}/stage/${preset}"
 
   rm -rf "$stage"
   mkdir -p "$stage/include" "$stage/lib"
 
   # Headers
-  cp "${PROJECT_ROOT}/include/timber.h" "$stage/include/"
-  cp "${PROJECT_ROOT}/bindings/c++/timber.hpp" "$stage/include/" 2>/dev/null || true
+  cp -v "${PROJECT_ROOT}/include/timber.h" "$stage/include/"
+  cp -v "${PROJECT_ROOT}/bindings/c++/timber.hpp" "$stage/include/" 2>/dev/null || true
 
   # Libraries
   find "$build_folder" -maxdepth 1 -type f \
@@ -89,24 +97,27 @@ pack_for() {
        -o -name '*.dylib' -o -name '*.lib' -o -name '*.pdb' \) \
        -exec cp {} "$stage/lib/" \;
 
-  if [[ $platform == *-win-* ]]; then
+  if [[ $preset =~ '(msvc|mingw)-.*' ]]; then
     (
       cd "${BUILD_FOLDER}/stage"
-      zip -r "${BUILD_FOLDER}/${platform}.zip" "$platform"
+      local output="${BUILD_FOLDER}${preset}.zip"
+      zip -r "$output" "$preset"
+      info "Created zip into: $output"
     )
   else
+    local output="${BUILD_FOLDER}${preset}.tar.gz"
     tar -C "${BUILD_FOLDER}/stage" \
-        -czf "${BUILD_FOLDER}/${platform}.tar.gz" \
-        "$platform"
+        -czf "$output" "$preset"
+    info "Created tarball into: $output"
   fi
 }
 
 if [[ $TARGET == "all" ]]; then
-  for platform in "${PLATFORMS[@]}"; do
-    build_for $platform
-    pack_for $platform
+  for preset in "${PRESETS[@]}"; do
+    build_for $preset
+    pack_for $preset
   done
 else
-  build_for $PLATFORM
-  pack_for $PLATFORM
+  build_for $PRESET
+  pack_for $PRESET
 fi

@@ -544,19 +544,3 @@ TIMBER_LEVELS
   }
   _TIMBER_UNREACHABLE("timber_level_to_cstr");
 }
-
-#define X(lower, upper)                                                                  \
-static inline bool timber_##lower##f(Timber *lg, const char *fmt, ...) { \
-  va_list args; va_start(args, fmt);                                                     \
-  bool ok = timber_vlogf(lg, TIMBER_##upper, fmt, args);                                 \
-  va_end(args);                                                                          \
-  return ok;                                                                             \
-}                                                                                        \
-static inline bool timber_##lower(Timber *lg, const char *msg) {                  \
-  return timber_logn(lg, TIMBER_##upper, msg, strlen(msg));                              \
-}                                                                                        \
-static inline bool timber_##lower##n(Timber *lg, const char *msg, size_t msgsz) { \
-  return timber_logn(lg, TIMBER_##upper, msg, msgsz);                                    \
-}
-TIMBER_LEVELS
-#undef X

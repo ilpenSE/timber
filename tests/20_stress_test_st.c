@@ -5,15 +5,15 @@
 #define MESSAGES 1000000
 
 int main(void) {
-  Timber timber = {0};
-  timber.log_policy = TIMBER_DROP_POLICY;
-  if (!timber_init(&timber)) return 1;
+  Timber *timber = timber_alloc();
+  timber_set_policy(timber, TIMBER_DROP_POLICY);
+  if (!timber_init(timber)) return 1;
   struct timespec start, end;
   volatile size_t dropped = 0;
 
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (volatile long i = 0; i < MESSAGES; i++) {
-    if (!timber_info(&timber, "Hello, World!")) {
+    if (!timber_info(timber, "Hello, World!")) {
       dropped++;
     }
   }
@@ -25,6 +25,7 @@ int main(void) {
   printf("%lf ns/call\n", (double)elapsed_ns/MESSAGES);
   printf("Dropped messages: %zu\n", dropped);
 
-  if (!timber_destroy(&timber)) return 2;
+  if (!timber_destroy(timber)) return 2;
+  timber_free(timber);
   return 0;
 }

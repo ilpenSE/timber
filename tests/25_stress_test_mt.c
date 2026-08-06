@@ -1,10 +1,11 @@
 #include <timber.h>
 #include <time.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 #define THREAD_COUNT 10
 #define MESSAGES_PER_THREAD 100000
-Timber timber = {0};
+Timber *timber;
 
 struct ThreadCtx {
   pthread_t id;
@@ -19,7 +20,7 @@ void *thread_func(void *cp) {
 
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (volatile long i = 0; i < MESSAGES_PER_THREAD; i++) {
-    if (!timber_infof(&timber, "[Thread %lu, %ld] Hello, World!", ctx->id, i)) {
+    if (!timber_infof(timber, "[Thread %lu, %ld] Hello, World!", ctx->id, i)) {
       dropped++;
     }
   }
@@ -36,8 +37,9 @@ void *thread_func(void *cp) {
 }
 
 int main(void) {
-  timber.log_policy = TIMBER_DROP_POLICY;
-  if (!timber_init(&timber)) return 1;
+  timber = timber_alloc();
+  timber_set_policy(timber, TIMBER_DROP_POLICY);
+  if (!timber_init(timber)) return 1;
   struct ThreadCtx threads[THREAD_COUNT] = {0};
 
   for (size_t i = 0; i < sizeof(threads)/sizeof(*threads); i++) {
@@ -59,6 +61,6 @@ int main(void) {
   printf("Total elapsed time per call: %lf ns\n", (double)total_elapsed_ns/(MESSAGES_PER_THREAD*THREAD_COUNT));
   printf("Total dropped messages: %zu\n", total_dropped);
 
-  if (!timber_destroy(&timber)) return 2;
+  if (!timber_destroy(timber)) return 2;
   return 0;
 }

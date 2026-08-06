@@ -53,28 +53,29 @@ private:
 class Timber {
 public:
   Timber(TimberPolicy policy = TIMBER_DROP_POLICY, const char *format = "") {
-    timber_set_policy(&m_inst, policy);
-    timber_set_format(&m_inst, format);
+    m_inst = timber_alloc();
+    timber_set_policy(m_inst, policy);
+    timber_set_format(m_inst, format);
   }
-  ~Timber() { if (m_is_initialized) timber_destroy(&m_inst); }
+  ~Timber() { if (m_is_initialized) timber_destroy(m_inst); timber_free(m_inst); }
   Timber(const Timber&) = delete;
   Timber& operator =(const Timber&) = delete;
   Timber(Timber&&) = delete;
   Timber& operator =(Timber&&) = delete;
 
   bool init() {
-    m_is_initialized = timber_init(&m_inst);
+    m_is_initialized = timber_init(m_inst);
     return m_is_initialized;
   }
 
   bool log(::TimberLevel level, const char *cstr, size_t size = 0) {
-    return timber_logn(&m_inst, level, cstr, size == 0 ? strlen(cstr) : size);
+    return timber_logn(m_inst, level, cstr, size == 0 ? strlen(cstr) : size);
   }
 #define X(lower, upper) \
   bool lower(const char *cstr, size_t size = 0) { \
     return log(TIMBER_##upper, cstr, size); \
   } \
-  Stream lower() { return Stream(&m_inst, TIMBER_##upper); }
+  Stream lower() { return Stream(m_inst, TIMBER_##upper); }
 TIMBER_LEVELS
 #undef X
 
@@ -96,19 +97,19 @@ TIMBER_LEVELS
 #endif // __cplusplus
 
   bool add_sink(const char *file_path) {
-    return timber_add_file_sink(&m_inst, file_path);
+    return timber_add_file_sink(m_inst, file_path);
   }
 
   bool add_sink(FILE *file) {
-    if (file == stdout) timber_add_stdout_sink(&m_inst);
-    else if (file == stderr) timber_add_stderr_sink(&m_inst);
+    if (file == stdout) timber_add_stdout_sink(m_inst);
+    else if (file == stderr) timber_add_stderr_sink(m_inst);
     else return false;
     return true;
   }
 
 private:
-  ::Timber m_inst{};
-  bool m_is_initialized;
+  ::Timber *m_inst = nullptr;
+  bool m_is_initialized = false;
 }; // class Timber
 } // namespace timber
 

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <pthread.h>
 
-Timber timber;
+Timber *timber;
 #define THREAD_COUNT 10
 #define MESSAGES_PER_THREAD 20
 pthread_t threads[THREAD_COUNT];
@@ -10,14 +10,16 @@ pthread_t threads[THREAD_COUNT];
 void *thread_func(void *ctx) {
   size_t id = (size_t)ctx;
   for (size_t i = 0; i < MESSAGES_PER_THREAD; i++) {
-    timber_infof(&timber, "[Thread %zu, %zu] Hello, World!", id, i);
+    timber_infof(timber, "[Thread %zu, %zu] Hello, World!", id, i);
   }
   return NULL;
 }
 
 int main(void) {
-  if (!timber_init(&timber)) return 1;
-  timber_add_stdout_sink(&timber);
+  timber = timber_alloc();
+
+  if (!timber_init(timber)) return 1;
+  timber_add_stdout_sink(timber);
 
   printf("Creating %d threads\n", THREAD_COUNT);
   for (size_t i = 0; i < THREAD_COUNT; i++) {
@@ -29,5 +31,6 @@ int main(void) {
     pthread_join(threads[i], NULL);
   }
 
-  if (!timber_destroy(&timber)) return 2;
+  if (!timber_destroy(timber)) return 2;
+  timber_free(timber);
 }

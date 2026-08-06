@@ -1,0 +1,75 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "linux-x64",
+      "binaryDir": "${sourceDir}/build/linux-x64"
+    },
+
+    {
+      "name": "linux-aarch64",
+      "binaryDir": "${sourceDir}/build/linux-aarch64",
+      "toolchainFile": "${sourceDir}/toolchains/linux.cmake",
+      "cacheVariables": { "ARCH": "aarch64" }
+    },
+
+    {
+      "name": "osx-x64",
+      "binaryDir": "${sourceDir}/build/osx-x64",
+      "toolchainFile": "${sourceDir}/toolchains/darwin-osxcross.cmake",
+      "cacheVariables": { "ARCH": "x86_64" }
+    },
+
+    {
+      "name": "osx-aarch64",
+      "binaryDir": "${sourceDir}/build/osx-aarch64",
+      "toolchainFile": "${sourceDir}/toolchains/darwin-osxcross.cmake",
+      "cacheVariables": { "ARCH": "aarch64" }
+    },
+
+    {
+      "name": "mingw-x64",
+      "binaryDir": "${sourceDir}/build/mingw-x64",
+      "toolchainFile": "${sourceDir}/toolchains/llvm-mingw.cmake",
+      "cacheVariables": { "ARCH": "x86_64" }
+    },
+
+    {
+      "name": "mingw-aarch64",
+      "binaryDir": "${sourceDir}/build/mingw-aarch64",
+      "toolchainFile": "${sourceDir}/toolchains/llvm-mingw.cmake",
+      "cacheVariables": { "ARCH": "aarch64" }
+    },
+
+    {
+      "name": "msvc-x64",
+      "binaryDir": "${sourceDir}/build/msvc-x64",
+      "toolchainFile": "${sourceDir}/toolchains/msvc-wine.cmake",
+      "cacheVariables": { "ARCH": "x64" }
+    },
+
+    {
+      "name": "msvc-aarch64",
+      "binaryDir": "${sourceDir}/build/msvc-aarch64",
+      "toolchainFile": "${sourceDir}/toolchains/msvc-wine.cmake",
+      "cacheVariables": { "ARCH": "arm64" }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "linux-x64", "configurePreset": "linux-x64" },
+    { "name": "mingw-x64", "configurePreset": "mingw-x64" },
+    { "name": "osx-x64",   "configurePreset": "osx-x64"   },
+    { "name": "msvc-x64",  "configurePreset": "msvc-x64"  },
+    { "name": "linux-aarch64", "configurePreset": "linux-aarch64" },
+    { "name": "mingw-aarch64", "configurePreset": "mingw-aarch64" },
+    { "name": "osx-aarch64",   "configurePreset": "osx-aarch64"   },
+    { "name": "msvc-aarch64",  "configurePreset": "msvc-aarch64"  }
+  ],
+
+  "testPresets": [
+    { "name": "linux", "configurePreset": "linux-x64", "output": {"outputOnFailure": true} },
+    { "name": "msvc", "configurePreset": "msvc-x64", "output": {"outputOnFailure": true} },
+    { "name": "mingw", "configurePreset": "mingw-x64", "output": {"outputOnFailure": true} }
+  ]
+}
