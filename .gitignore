@@ -12,3 +12,4 @@ build_*
 *.exe
 artifacts
 Testing
+docs

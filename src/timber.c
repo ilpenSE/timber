@@ -207,14 +207,14 @@ struct TimberSlot {
 };
 
 struct TimberQueue {
+  struct TimberSlot items[TIMBER_QUEUE_SIZE];
   alignas(64) TIMBER_ATOMIC(size_t) head;
   alignas(64) size_t tail;
-  struct TimberSlot items[TIMBER_QUEUE_SIZE];
 };
 
 struct Timber {
   alignas(64) TIMBER_ATOMIC(bool) is_alive;
-  alignas(64) struct TimberQueue queue;
+  struct TimberQueue queue;
   timber_pthread_t thread;
   timber_fd_t sinks[TIMBER_MAX_SINKS]; // array of fds/HANDLEs
   size_t sink_count;
@@ -466,9 +466,12 @@ bool timber_destroy(Timber *lg) {
     _timber_report_error("sem_destroy(sem_full_slots)");
     return false;
   }
-  if (!timber_sem_destroy(&lg->sem_empty_slots)) {
-    _timber_report_error("sem_destroy(sem_empty_slots)");
-    return false;
+
+  if (lg->log_policy == TIMBER_BLOCK_POLICY) {
+    if (!timber_sem_destroy(&lg->sem_empty_slots)) {
+      _timber_report_error("sem_destroy(sem_empty_slots)");
+      return false;
+    }
   }
 
   for (size_t i = 0; i < lg->sink_count; i++) {

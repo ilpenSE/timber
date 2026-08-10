@@ -1,0 +1,33 @@
+# Doxyfile 1.16.1
+
+PROJECT_NAME           = "timber"
+PROJECT_BRIEF          = "Asynchronous, flexible logging library"
+PROJECT_NUMBER         = "1.1.1"
+
+GENERATE_HTML          = YES
+GENERATE_XML           = YES
+GENERATE_MAN           = YES
+GENERATE_LATEX         = YES
+
+INPUT                  = include/timber.h
+
+RECURSIVE              = YES
+OUTPUT_DIRECTORY       = docs
+
+EXCLUDE_SYMLINKS       = YES
+DOXYFILE_ENCODING      = UTF-8
+INPUT_ENCODING         = UTF-8
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+EXTRACT_LOCAL_CLASSES  = NO
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+MARKDOWN_SUPPORT       = YES
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
