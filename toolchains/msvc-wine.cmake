@@ -3,7 +3,7 @@
 #
 # Default values: (Define them according to your environment)
 # ARCH = x86_64
-# ROOT = $HOME/.local/msvc-wine
+# ROOT = /opt/msvc-wine
 #
 # Define ARCH with these: x64 -> amd64; arm64 -> arm64
 # Define ROOT to your msvc-wine path like: $HOME/.local/msvc-wine
@@ -14,7 +14,7 @@ if (NOT DEFINED ARCH)
 endif()
 
 if (NOT DEFINED ROOT)
-  set(ROOT "$ENV{HOME}/.local/msvc-wine" CACHE STRING "msvc-wine installation path")
+  set(ROOT "/opt/msvc" CACHE STRING "msvc-wine installation path")
 endif()
 
 set(CMAKE_SYSTEM_NAME Windows)

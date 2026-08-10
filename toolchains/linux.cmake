@@ -2,7 +2,7 @@
 #
 # Default values: (Define them according to your environment)
 # ARCH = x86_64
-# ROOT = /
+# ROOT = /usr
 #
 # Define ARCH with these: x86_64, x86_64h -> amd64; arm64, o64, arm64e, aarch64 -> arm64
 # Define ROOT if you're not using linux machine to something else

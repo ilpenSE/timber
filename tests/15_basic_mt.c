@@ -1,11 +1,11 @@
 #include <timber.h>
 #include <stdio.h>
-#include <pthread.h>
+#include "thread.h"
 
 Timber *timber;
 #define THREAD_COUNT 10
 #define MESSAGES_PER_THREAD 20
-pthread_t threads[THREAD_COUNT];
+thread_t threads[THREAD_COUNT];
 
 void *thread_func(void *ctx) {
   size_t id = (size_t)ctx;
@@ -23,12 +23,12 @@ int main(void) {
 
   printf("Creating %d threads\n", THREAD_COUNT);
   for (size_t i = 0; i < THREAD_COUNT; i++) {
-    pthread_create(&threads[i], NULL, thread_func, (void*)i);
+    thread_create(&threads[i], NULL, thread_func, (void*)i);
   }
 
   printf("Joining %d threads\n", THREAD_COUNT);
   for (int i = 0; i < THREAD_COUNT; i++) {
-    pthread_join(threads[i], NULL);
+    thread_join(&threads[i], NULL);
   }
 
   if (!timber_destroy(timber)) return 2;

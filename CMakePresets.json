@@ -65,11 +65,5 @@
     { "name": "mingw-aarch64", "configurePreset": "mingw-aarch64" },
     { "name": "osx-aarch64",   "configurePreset": "osx-aarch64"   },
     { "name": "msvc-aarch64",  "configurePreset": "msvc-aarch64"  }
-  ],
-
-  "testPresets": [
-    { "name": "linux", "configurePreset": "linux-x64", "output": {"outputOnFailure": true} },
-    { "name": "msvc", "configurePreset": "msvc-x64", "output": {"outputOnFailure": true} },
-    { "name": "mingw", "configurePreset": "mingw-x64", "output": {"outputOnFailure": true} }
   ]
 }

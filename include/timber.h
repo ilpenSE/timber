@@ -18,10 +18,8 @@
   #endif
 #endif
 
-#ifndef _TIMBER_USING_VALID_C
-#ifndef _TIMBER_USING_VALID_CXX
+#if !defined(_TIMBER_USING_VALID_C) && !defined(_TIMBER_USING_VALID_CXX)
   #error "Required C or C++ version not found: >=C99 or >=C++11"
-#endif
 #endif
 
 // Define TIMBER_RELEASE or TIMBER_NDEBUG for release builds
@@ -34,15 +32,16 @@
   Format: MAJOR_MINOR_PATCH_L (concat these)
   Minor and patch should be padded with 0 if they're 1 digit long.
 */
-#define TIMBER_VER 10001L
+#define TIMBER_VER 10100L
 #define TIMBER_MAJOR 1
-#define TIMBER_MINOR 0
-#define TIMBER_PATCH 1
+#define TIMBER_MINOR 1
+#define TIMBER_PATCH 0
 
-// Maximum amount of sinks in an instance
-#define TIMBER_MAX_SINKS 8
-#define TIMBER_MAX_MSG_SIZE 256
-#define TIMBER_QUEUE_SIZE 1024
+// General configuration of Timber
+#define TIMBER_MAX_SINKS 8 // Maximum amount of sinks in an instance
+#define TIMBER_MAX_MSG_SIZE 256 // Max length of a single message
+#define TIMBER_MAX_BATCH 32 // Maximum amount of batching messages in queue
+#define TIMBER_QUEUE_SIZE 1024 // Size of the queue (MPSC ring buffer)
 typedef struct Timber Timber;
 
 // Log Levels you can add another one like we did if you wish
@@ -59,7 +58,7 @@ typedef enum {
 } TimberLevel;
 
 typedef enum {
-  TIMBER_DROP_POLICY,
+  TIMBER_DROP_POLICY = 0,
   TIMBER_BLOCK_POLICY,
   _TimberPolicy_count,
 } TimberPolicy;

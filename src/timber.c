@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdalign.h>
 
 #define TIMBER_TODO(fmt, ...)             \
   do {                                    \
@@ -52,7 +53,7 @@
 #define timber_atomic_cas_weak atomic_compare_exchange_weak_explicit
 #endif
 
-// POSIX/Windows semaphore and pthread abstraction
+// POSIX/Windows abstraction
 typedef void *(*timber_thread_fn_t)(void*);
 #ifdef _WIN32
 #include <windows.h>
@@ -68,6 +69,10 @@ typedef struct TimberThreadCtx {
 typedef HANDLE timber_sem_t;
 typedef SECURITY_ATTRIBUTES timber_pthread_attr_t;
 typedef HANDLE timber_fd_t;
+struct iovec {
+  void   *iov_base;
+  size_t iov_len;
+};
 
 static inline bool timber_sem_init(timber_sem_t *sem, int pshared, unsigned int value) {
   (void)pshared;
@@ -87,7 +92,7 @@ static inline bool timber_sem_post(timber_sem_t *sem)
 static inline bool timber_sem_destroy(timber_sem_t *sem)
 { return CloseHandle(*sem) != 0; }
 
-static unsigned __stdcall _timber_consumer_trampoline(void *cp) {
+static inline unsigned __stdcall _timber_consumer_trampoline(void *cp) {
   timber_pthread_t *ctx = (timber_pthread_t *)cp;
   ctx->retval = ctx->start_routine(ctx->arg);
   return 0;
@@ -158,6 +163,7 @@ static int _timber_win32_error_to_cerrno() {
 #include <fcntl.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <sys/uio.h>
 
 typedef pthread_t timber_pthread_t;
 typedef pthread_attr_t timber_pthread_attr_t;
@@ -180,9 +186,9 @@ static inline bool timber_sem_trywait(timber_sem_t *s)
 { return sem_trywait(s) == 0; }
 
 static inline bool timber_pthread_create(timber_pthread_t *thread,
-                                    const timber_pthread_attr_t *attr,
-                                    timber_thread_fn_t start_routine,
-                                    void *arg)
+                                         const timber_pthread_attr_t *attr,
+                                         timber_thread_fn_t start_routine,
+                                         void *arg)
 { return pthread_create(thread, attr, start_routine, arg) == 0; }
 
 static inline bool timber_pthread_join(timber_pthread_t *thread, void **retval)
@@ -201,23 +207,23 @@ struct TimberSlot {
 };
 
 struct TimberQueue {
+  alignas(64) TIMBER_ATOMIC(size_t) head;
+  alignas(64) size_t tail;
   struct TimberSlot items[TIMBER_QUEUE_SIZE];
-  TIMBER_ATOMIC(size_t) head;
-  size_t tail;
 };
 
 struct Timber {
-  TIMBER_ATOMIC(bool) is_alive;
+  alignas(64) TIMBER_ATOMIC(bool) is_alive;
+  alignas(64) struct TimberQueue queue;
   timber_pthread_t thread;
+  timber_fd_t sinks[TIMBER_MAX_SINKS]; // array of fds/HANDLEs
+  size_t sink_count;
+  const char *format;
   // the signal which is used for producers to signal consumer
   timber_sem_t sem_full_slots;
   // the signal which is used for consumer signals to producers for an empty slot (only for TIMBER_BLOCK_POLICY)
   timber_sem_t sem_empty_slots;
-  timber_fd_t sinks[TIMBER_MAX_SINKS]; // array of fds/HANDLEs
-  size_t sink_count;
-  struct TimberQueue queue;
   TimberPolicy log_policy;
-  const char *format;
   // TODO: Add format string and parsing
 };
 
@@ -240,13 +246,28 @@ struct Timber {
 #define _timber_report_error(function) (void)(function)
 #endif
 
+static size_t _timber_format_msg(struct TimberPayload *payload, char *out, size_t outsz) {
+  const char *level_str = timber_level_to_cstr(payload->level);
+  int n = snprintf(out, outsz, "%s: %.*s\n", level_str, (int)payload->msg_count, payload->msg);
+  if (n < 0) {
+    errno = EINVAL; return -1;
+  } else if ((size_t)n >= outsz) {
+    n = outsz - 1;
+    out[outsz - 2] = '\n'; // guaranteed new line
+  }
+  return (size_t)n;
+}
+
 static void *_timber_consumer(void *ctxptr) {
-  _timber_debug("thread initialized, sleeping");
+  _timber_debug("thread initialized");
   struct Timber *ctx = (struct Timber *)ctxptr;
   struct TimberQueue *q = &ctx->queue;
 #ifdef TIMBER_DEBUG
   size_t processed = 0;
 #endif
+  char buffers[TIMBER_MAX_BATCH][TIMBER_MAX_MSG_SIZE + 64];
+  struct iovec vecs[TIMBER_MAX_BATCH];
+  int vec_count = 0;
 
   // Event loop
   while (1) {
@@ -262,44 +283,56 @@ static void *_timber_consumer(void *ctxptr) {
     }
 
     // Process payload
-    // TODO: Add batch writing and formating
-    size_t pos = q->tail;
-    struct TimberSlot *slot = &q->items[pos % TIMBER_QUEUE_SIZE];
-    size_t spins = 0;
-    while (timber_atomic_load(&slot->seq, timber_morder_acquire) != pos + 1) {
-      // spin-wait for some time then pause/yield instruction
-      if (spins++ > 64) _TIMBER_PAUSE;
+    // TODO: Add formating
+    size_t start_pos = q->tail;
+    size_t batch_count = 0;
+    while (batch_count < TIMBER_MAX_BATCH) {
+      size_t idx = start_pos + batch_count;
+      struct TimberSlot *slot = &q->items[idx%TIMBER_QUEUE_SIZE];
+      if (timber_atomic_load(&slot->seq, timber_morder_acquire) != idx + 1) {
+        break; // slot is not ready yet
+      }
+      batch_count++;
     }
+    q->tail += batch_count;
 
-    struct TimberPayload payload = slot->payload;
-    timber_atomic_store(&slot->seq, pos + TIMBER_QUEUE_SIZE, timber_morder_release);
-    q->tail++;
-    if (ctx->log_policy == TIMBER_BLOCK_POLICY) timber_sem_post(&ctx->sem_empty_slots);
+    vec_count = 0;
+    for (size_t i = 0; i < batch_count; i++) {
+      struct TimberSlot *s = &q->items[(start_pos + i)%TIMBER_QUEUE_SIZE];
+      struct TimberPayload payload = s->payload;
+      timber_atomic_store(&s->seq, start_pos + i + TIMBER_QUEUE_SIZE, timber_morder_release);
+      if (ctx->log_policy == TIMBER_BLOCK_POLICY) timber_sem_post(&ctx->sem_empty_slots);
 
-    const char *level_str = timber_level_to_cstr(payload.level);
-    char buffer[1024];
-    int n = snprintf(buffer, sizeof(buffer), "%s: %.*s\n", level_str, (int)payload.msg_count, payload.msg);
-    if (n < 0) {
-      _timber_report_error("snprintf failed in consumer");
-      errno = EINVAL; return NULL;
-    } else if ((size_t)n >= sizeof(buffer)) {
-      n = sizeof(buffer) - 1;
-      buffer[sizeof(buffer) - 2] = '\n';
+      size_t count = _timber_format_msg(&payload, buffers[i], sizeof(buffers[i]));
+      if (count == -1) {
+        _timber_debug_err("[Consumer] Couldn't format a message, dropping it");
+        continue;
+      }
+      vecs[vec_count++] = (struct iovec){buffers[i], count};
     }
 
     for (size_t i = 0; i < ctx->sink_count; i++) {
       timber_fd_t fd = ctx->sinks[i];
-
 #ifdef _WIN32
-      DWORD written;
-      WriteFile(fd, buffer, (DWORD)n, &written, NULL);
+      // Windows doesn't deserve gather/scatter IO because none of the games on earth uses it
+      // And also, no one cares about scatter IO amongst Windows users because they're all gamers
+      for (size_t i = 0; i < vec_count; i++) {
+        struct iovec vec = vecs[i];
+        if (!WriteFile(fd, vec.iov_base, vec.iov_len, NULL, NULL)) {
+          _timber_debug_err("WriteFile");
+          continue;
+        }
+      }
 #else
-      write(fd, buffer, n);
+      if (writev(fd, vecs, vec_count) < 0) {
+        _timber_debug_err("writev");
+        continue;
+      }
 #endif
     }
 
 #ifdef TIMBER_DEBUG
-    processed++;
+    processed += batch_count;
 #endif
   }
 
@@ -378,6 +411,7 @@ bool timber_init(Timber *lg) {
   if (!lg) { errno = EINVAL; return false; }
   int ret;
   lg->is_alive = true;
+  timber_atomic_init(&lg->queue.head, 0);
 
   for (size_t i = 0; i < TIMBER_QUEUE_SIZE; ++i)
     timber_atomic_init(&lg->queue.items[i].seq, i);

@@ -1,36 +1,44 @@
 #include <timber.h>
-#include <time.h>
 #include <inttypes.h>
-#include <pthread.h>
+#include "thread.h"
+#include "benchmark.h"
 
 #define THREAD_COUNT 10
 #define MESSAGES_PER_THREAD 100000
 Timber *timber;
 
 struct ThreadCtx {
-  pthread_t id;
+  thread_t id;
   int64_t elapsed_ns;
   size_t dropped;
 };
 
 void *thread_func(void *cp) {
   struct ThreadCtx *ctx = (struct ThreadCtx *)cp;
+#if _WIN32
+  #define PRIthid "p"
+  void *id = ctx->id.handle;
+#else
+  #define PRIthid "lu"
+  thread_t id = ctx->id;
+#endif
+
   struct timespec start, end;
   volatile size_t dropped = 0;
 
-  clock_gettime(CLOCK_MONOTONIC, &start);
+  get_monotonic_time(&start);
   for (volatile long i = 0; i < MESSAGES_PER_THREAD; i++) {
-    if (!timber_infof(timber, "[Thread %lu, %ld] Hello, World!", ctx->id, i)) {
+    if (!timber_infof(timber, "[Thread %" PRIthid ", %ld] Hello, World!", id, i)) {
       dropped++;
     }
   }
-  clock_gettime(CLOCK_MONOTONIC, &end);
+  get_monotonic_time(&end);
 
   int64_t elapsed_ns = (int64_t)(end.tv_sec - start.tv_sec) * 1000000000LL
                        + (int64_t)(end.tv_nsec - start.tv_nsec);
-  printf("[Thread %lu] Total elapsed time = %" PRId64 " ns, %lf ns/call\n",
-          ctx->id, elapsed_ns, (double)elapsed_ns/MESSAGES_PER_THREAD);
-  printf("[Thread %lu] Dropped messages: %zu\n", ctx->id, dropped);
+  printf("[Thread %" PRIthid "] Total elapsed time = %" PRId64 " ns, %lf ns/call\n",
+          id, elapsed_ns, (double)elapsed_ns/MESSAGES_PER_THREAD);
+  printf("[Thread %" PRIthid "] Dropped messages: %zu\n", id, dropped);
   ctx->elapsed_ns = elapsed_ns;
   ctx->dropped = dropped;
   return NULL;
@@ -38,16 +46,15 @@ void *thread_func(void *cp) {
 
 int main(void) {
   timber = timber_alloc();
-  timber_set_policy(timber, TIMBER_DROP_POLICY);
   if (!timber_init(timber)) return 1;
   struct ThreadCtx threads[THREAD_COUNT] = {0};
 
   for (size_t i = 0; i < sizeof(threads)/sizeof(*threads); i++) {
-    pthread_create(&threads[i].id, NULL, thread_func, &threads[i]);
+    thread_create(&threads[i].id, NULL, thread_func, &threads[i]);
   }
 
   for (size_t i = 0; i < sizeof(threads)/sizeof(*threads); i++) {
-    pthread_join(threads[i].id, NULL);
+    thread_join(&threads[i].id, NULL);
   }
 
   size_t total_dropped = 0;
@@ -60,6 +67,8 @@ int main(void) {
   printf("Total elapsed: %" PRId64" ns\n", total_elapsed_ns);
   printf("Total elapsed time per call: %lf ns\n", (double)total_elapsed_ns/(MESSAGES_PER_THREAD*THREAD_COUNT));
   printf("Total dropped messages: %zu\n", total_dropped);
+  double throughput = (double)(MESSAGES_PER_THREAD * THREAD_COUNT) / (total_elapsed_ns * 1e-9);
+  printf("Throughput: %lf log/sec\n", throughput);
 
   if (!timber_destroy(timber)) return 2;
   return 0;

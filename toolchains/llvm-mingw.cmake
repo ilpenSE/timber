@@ -3,7 +3,7 @@
 #
 # Default values: (Define them according to your environment)
 # ARCH = x86_64
-# ROOT = $HOME/.local/llvm-mingw
+# ROOT = /opt/llvm-mingw
 #
 # Define ARCH with these: x86_64, x86_64h -> amd64; arm64, o64, arm64e, aarch64 -> arm64
 # Define ROOT to your llvm-mingw path like: $HOME/.local/llvm-mingw
@@ -14,7 +14,7 @@ if (NOT DEFINED ARCH)
 endif()
 
 if (NOT DEFINED ROOT)
-  set(ROOT "$ENV{HOME}/.local/llvm-mingw" CACHE STRING "llvm-mingw installation path")
+  set(ROOT "/opt/llvm-mingw" CACHE STRING "llvm-mingw installation path")
 endif()
 
 set(LLVM_MINGW_TRIPLE "${ARCH}-w64-mingw32")
