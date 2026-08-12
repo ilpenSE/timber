@@ -1,6 +1,6 @@
 /**
  * @file timber.h
- * @version 1.1.1
+ * @version 1.2.0
  * @brief Timber an asynchronous logging library.
  *
  * Timber is a lightweight asynchronous logging library supporting
@@ -43,16 +43,16 @@
 /**
  * @brief Timber version encoded as MAJOR_MINOR_PATCH.
  */
-#define TIMBER_VER 10100L
+#define TIMBER_VER 10200L
 
 /** @brief Timber major version. */
 #define TIMBER_MAJOR 1
 
 /** @brief Timber minor version. */
-#define TIMBER_MINOR 1
+#define TIMBER_MINOR 2
 
 /** @brief Timber patch version. */
-#define TIMBER_PATCH 1
+#define TIMBER_PATCH 0
 
 /**
  * @brief Maximum number of sinks that can be attached to a logger.
