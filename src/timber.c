@@ -40,6 +40,7 @@
 #define timber_morder_release ::std::memory_order_release
 #define timber_atomic_store ::std::atomic_store_explicit
 #define timber_atomic_load ::std::atomic_load_explicit
+#define timber_atomic_fetch_add ::std::atomic_fetch_add_explicit
 #define timber_atomic_cas_weak ::std::atomic_compare_exchange_weak_explicit
 #else
 #include <stdatomic.h>
@@ -50,6 +51,7 @@
 #define timber_morder_release memory_order_release
 #define timber_atomic_store atomic_store_explicit
 #define timber_atomic_load atomic_load_explicit
+#define timber_atomic_fetch_add atomic_fetch_add_explicit
 #define timber_atomic_cas_weak atomic_compare_exchange_weak_explicit
 #endif
 
@@ -66,14 +68,49 @@ typedef struct TimberThreadCtx {
   HANDLE handle;
 } timber_pthread_t;
 
+typedef struct {
+  void  *iov_base;
+  size_t iov_len;
+} timber_iovec;
+
 typedef HANDLE timber_sem_t;
 typedef SECURITY_ATTRIBUTES timber_pthread_attr_t;
+typedef CRITICAL_SECTION timber_mutex_t;
+typedef CONDITION_VARIABLE timber_cond_t;
+typedef void timber_mutexattr_t;
+typedef void timber_condattr_t;
 typedef HANDLE timber_fd_t;
-struct iovec {
-  void   *iov_base;
-  size_t iov_len;
-};
 
+// Mutexes
+static inline bool timber_mutex_init(timber_mutex_t *mutex, const timber_mutexattr_t *attr)
+{ InitializeCriticalSection(mutex); return true; }
+
+static inline bool timber_mutex_lock(timber_mutex_t *mutex)
+{ EnterCriticalSection(mutex); return true; }
+
+static inline bool timber_mutex_unlock(timber_mutex_t *mutex)
+{ LeaveCriticalSection(mutex); return true; }
+
+static inline bool timber_mutex_destroy(timber_mutex_t *mutex)
+{ DeleteCriticalSection(mutex); return true; }
+
+// Condition variables
+static inline bool timber_cond_init(timber_cond_t *cond, timber_condattr_t *cond_attr)
+{ InitializeConditionVariable(cond); return true; }
+
+static inline bool timber_cond_broadcast(timber_cond_t *cond)
+{ WakeAllConditionVariable(cond); return true; }
+
+static inline bool timber_cond_wait(timber_cond_t *cond, timber_mutex_t *mutex)
+{ return SleepConditionVariableCS(cond, mutex, INFINITE) != 0; }
+
+static inline bool timber_cond_destroy(timber_cond_t *cond)
+{ (void)cond; return true; }
+
+static inline bool timber_cond_signal(timber_cond_t *cond)
+{ WakeConditionVariable(cond); return true; }
+
+// Semaphores
 static inline bool timber_sem_init(timber_sem_t *sem, int pshared, unsigned int value) {
   (void)pshared;
   *sem = CreateSemaphore(NULL, value, LONG_MAX, NULL);
@@ -92,6 +129,7 @@ static inline bool timber_sem_post(timber_sem_t *sem)
 static inline bool timber_sem_destroy(timber_sem_t *sem)
 { return CloseHandle(*sem) != 0; }
 
+// Pthreads
 static inline unsigned __stdcall _timber_consumer_trampoline(void *cp) {
   timber_pthread_t *ctx = (timber_pthread_t *)cp;
   ctx->retval = ctx->start_routine(ctx->arg);
@@ -167,14 +205,53 @@ static int _timber_win32_error_to_cerrno() {
 
 typedef pthread_t timber_pthread_t;
 typedef pthread_attr_t timber_pthread_attr_t;
+typedef pthread_mutex_t timber_mutex_t;
+typedef pthread_cond_t timber_cond_t;
+typedef pthread_mutexattr_t timber_mutexattr_t;
+typedef pthread_condattr_t timber_condattr_t;
 typedef sem_t timber_sem_t;
 typedef int timber_fd_t;
+typedef struct iovec timber_iovec;
 
+// Mutexes
+static inline bool timber_mutex_init(timber_mutex_t *mutex, const timber_mutexattr_t *attr)
+{ return pthread_mutex_init(mutex, attr) == 0; }
+
+static inline bool timber_mutex_lock(timber_mutex_t *mutex)
+{ return pthread_mutex_lock(mutex) == 0; }
+
+static inline bool timber_mutex_unlock(timber_mutex_t *mutex)
+{ return pthread_mutex_unlock(mutex) == 0; }
+
+static inline bool timber_mutex_destroy(timber_mutex_t *mutex)
+{ return pthread_mutex_destroy(mutex) == 0; }
+
+// Condition variables
+static inline bool timber_cond_init(timber_cond_t *cond, timber_condattr_t *cond_attr)
+{ return pthread_cond_init(cond, cond_attr) == 0; }
+
+static inline bool timber_cond_broadcast(timber_cond_t *cond)
+{ return pthread_cond_broadcast(cond) == 0; }
+
+static inline bool timber_cond_wait(timber_cond_t *cond, timber_mutex_t *mutex)
+{ return pthread_cond_wait(cond, mutex) == 0; }
+
+static inline bool timber_cond_destroy(timber_cond_t *cond)
+{ return pthread_cond_destroy(cond) == 0; }
+
+static inline bool timber_cond_signal(timber_cond_t *cond)
+{ return pthread_cond_signal(cond) == 0; }
+
+// Semaphores
 static inline bool timber_sem_init(timber_sem_t *s, int pshared, unsigned int v)
 { return sem_init(s, pshared, v) == 0; }
 
 static inline bool timber_sem_wait(timber_sem_t *s)
-{ return sem_wait(s) == 0; }
+{
+  int r;
+  do { r = sem_wait(s); } while (r != 0 && errno == EINTR);
+  return r == 0;
+}
 
 static inline bool timber_sem_post(timber_sem_t *s)
 { return sem_post(s) == 0; }
@@ -185,6 +262,7 @@ static inline bool timber_sem_destroy(timber_sem_t *s)
 static inline bool timber_sem_trywait(timber_sem_t *s)
 { return sem_trywait(s) == 0; }
 
+// Pthreads
 static inline bool timber_pthread_create(timber_pthread_t *thread,
                                          const timber_pthread_attr_t *attr,
                                          timber_thread_fn_t start_routine,
@@ -209,7 +287,7 @@ struct TimberSlot {
 struct TimberQueue {
   struct TimberSlot items[TIMBER_QUEUE_SIZE];
   alignas(64) TIMBER_ATOMIC(size_t) head;
-  alignas(64) size_t tail;
+  alignas(64) TIMBER_ATOMIC(size_t) tail;
 };
 
 struct Timber {
@@ -223,6 +301,9 @@ struct Timber {
   timber_sem_t sem_full_slots;
   // the signal which is used for consumer signals to producers for an empty slot (only for TIMBER_BLOCK_POLICY)
   timber_sem_t sem_empty_slots;
+  // mutex and condvar for flush() barrier
+  timber_mutex_t mtx_flush;
+  timber_cond_t  cond_flush;
   TimberPolicy log_policy;
   // TODO: Add format string and parsing
 };
@@ -266,25 +347,24 @@ static void *_timber_consumer(void *ctxptr) {
   size_t processed = 0;
 #endif
   char buffers[TIMBER_MAX_BATCH][TIMBER_MAX_MSG_SIZE + 64];
-  struct iovec vecs[TIMBER_MAX_BATCH];
+  timber_iovec vecs[TIMBER_MAX_BATCH];
   int vec_count = 0;
 
   // Event loop
   while (1) {
     // wait for ready messages
-    if (!timber_sem_wait(&ctx->sem_full_slots)) {
-      _timber_report_error("sem_wait in consumer");
-      return NULL;
-    }
+    bool ret = timber_sem_wait(&ctx->sem_full_slots);
+    assert(ret && "sem_wait");
     size_t head = timber_atomic_load(&q->head, timber_morder_relaxed);
-    if (head == q->tail) {
+    size_t tail = timber_atomic_load(&q->tail, timber_morder_relaxed);
+    if (head == tail) {
       if (!timber_atomic_load(&ctx->is_alive, timber_morder_relaxed)) break;
       continue;
     }
 
     // Process payload
     // TODO: Add formating
-    size_t start_pos = q->tail;
+    size_t start_pos = timber_atomic_load(&q->tail, timber_morder_relaxed);
     size_t batch_count = 0;
     while (batch_count < TIMBER_MAX_BATCH) {
       size_t idx = start_pos + batch_count;
@@ -294,7 +374,6 @@ static void *_timber_consumer(void *ctxptr) {
       }
       batch_count++;
     }
-    q->tail += batch_count;
 
     vec_count = 0;
     for (size_t i = 0; i < batch_count; i++) {
@@ -308,7 +387,7 @@ static void *_timber_consumer(void *ctxptr) {
         _timber_debug_err("[Consumer] Couldn't format a message, dropping it");
         continue;
       }
-      vecs[vec_count++] = (struct iovec){buffers[i], count};
+      vecs[vec_count++] = (timber_iovec){buffers[i], count};
     }
 
     for (size_t i = 0; i < ctx->sink_count; i++) {
@@ -317,19 +396,31 @@ static void *_timber_consumer(void *ctxptr) {
       // Windows doesn't deserve gather/scatter IO because none of the games on earth uses it
       // And also, no one cares about scatter IO amongst Windows users because they're all gamers
       for (size_t i = 0; i < vec_count; i++) {
-        struct iovec vec = vecs[i];
-        if (!WriteFile(fd, vec.iov_base, vec.iov_len, NULL, NULL)) {
+        timber_iovec vec = vecs[i];
+        BOOL ok = WriteFile(fd, vec.iov_base, vec.iov_len, NULL, NULL);
+        #ifdef TIMBER_DEBUG
+        if (!ok) {
           _timber_debug_err("WriteFile");
           continue;
         }
+        #endif
       }
-#else
-      if (writev(fd, vecs, vec_count) < 0) {
+
+#else // POSIX
+      ssize_t n = writev(fd, vecs, vec_count);
+      #ifdef TIMBER_DEBUG
+      if (n < 0) {
         _timber_debug_err("writev");
         continue;
       }
+      #endif
 #endif
     }
+
+    timber_atomic_fetch_add(&q->tail, batch_count, timber_morder_release);
+    timber_mutex_lock(&ctx->mtx_flush);
+    timber_cond_broadcast(&ctx->cond_flush);
+    timber_mutex_unlock(&ctx->mtx_flush);
 
 #ifdef TIMBER_DEBUG
     processed += batch_count;
@@ -338,11 +429,25 @@ static void *_timber_consumer(void *ctxptr) {
 
 #ifdef TIMBER_DEBUG
   _timber_debug("Exiting consumer thread, stats:");
-  size_t remaining = q->tail - timber_atomic_load(&q->head, timber_morder_relaxed);
+  size_t head = timber_atomic_load(&q->head, timber_morder_relaxed);
+  size_t tail = timber_atomic_load(&q->tail, timber_morder_relaxed);
+  size_t remaining = head - tail;
   _timber_debug("total unprocessed %zu messages", remaining);
   _timber_debug("total processed %zu messages", processed);
 #endif
   return (void *)1;
+}
+
+bool timber_flush(Timber *lg) {
+  if (!lg) return false;
+  if (!timber_atomic_load(&lg->is_alive, timber_morder_relaxed)) return false;
+  size_t head = timber_atomic_load(&lg->queue.head, timber_morder_acquire);
+  timber_mutex_lock(&lg->mtx_flush);
+  while (timber_atomic_load(&lg->queue.tail, timber_morder_acquire) < head) {
+    timber_cond_wait(&lg->cond_flush, &lg->mtx_flush);
+  }
+  timber_mutex_unlock(&lg->mtx_flush);
+  return true;
 }
 
 bool timber_vlogf(Timber *lg, TimberLevel level, const char *fmt, va_list args) {
@@ -366,8 +471,13 @@ bool timber_log(Timber *lg, TimberLevel level, const char *msg) {
 }
 
 bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz) {
-  if (!timber_atomic_load(&lg->is_alive, timber_morder_relaxed)) { errno = EPIPE; return false; }
-  if (msgsz > TIMBER_MAX_MSG_SIZE) { errno = EINVAL; return false; }
+  if (!timber_atomic_load(&lg->is_alive, timber_morder_relaxed)) {
+    errno = EPIPE; return false;
+  }
+
+  if (msgsz > TIMBER_MAX_MSG_SIZE) {
+    errno = EINVAL; return false;
+  }
 
   // CAS loop for claiming slot
   size_t pos;
@@ -384,10 +494,8 @@ bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz) {
     } else if (seq < pos) {
       // queue full, decide what to do by policy
       if (lg->log_policy == TIMBER_BLOCK_POLICY) {
-        if (!timber_sem_wait(&lg->sem_empty_slots)) {
-          _timber_report_error("sem_wait(sem_empty_slots)");
-          return false;
-        }
+        bool ret = timber_sem_wait(&lg->sem_empty_slots);
+        assert(ret && "sem_wait on producer CAS loop");
       } else { errno = ENOBUFS; return false; }
     }
   }
@@ -400,22 +508,17 @@ bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz) {
   // set slot's seq == pos + 1 (ready signal for consumer)
   // and signal consumer thread
   timber_atomic_store(&slot->seq, pos + 1, timber_morder_release);
-  if (!timber_sem_post(&lg->sem_full_slots)) {
-    _timber_report_error("sem_post(sem_full_slots)");
-    return false;
-  }
+  bool ret = timber_sem_post(&lg->sem_full_slots);
+  assert(ret && "sem_post(sem_full_slots)");
   return true;
 }
 
 bool timber_init(Timber *lg) {
   if (!lg) { errno = EINVAL; return false; }
-  int ret;
+  bool ret;
   lg->is_alive = true;
-  timber_atomic_init(&lg->queue.head, 0);
 
-  for (size_t i = 0; i < TIMBER_QUEUE_SIZE; ++i)
-    timber_atomic_init(&lg->queue.items[i].seq, i);
-
+  // Create semaphores (error when resources aren't available)
   if (!timber_sem_init(&lg->sem_full_slots, 0, 0)) {
     _timber_report_error("sem_init(sem_full_slots)");
     goto fail;
@@ -428,63 +531,69 @@ bool timber_init(Timber *lg) {
     }
   }
 
+  // Create thread (error when resources aren't available)
   if (!timber_pthread_create(&lg->thread, NULL, _timber_consumer, lg)) {
     _timber_report_error("pthread_create");
     goto fail_sem_empty;
   }
 
+  // Initialize atomics (no errors)
+  timber_atomic_init(&lg->queue.head, 0);
+  for (size_t i = 0; i < TIMBER_QUEUE_SIZE; ++i)
+    timber_atomic_init(&lg->queue.items[i].seq, i);
+
+  // Initialize mutex and condvar (shouldn't error out)
+  ret = timber_mutex_init(&lg->mtx_flush, NULL);
+  assert(ret && "mutex_init");
+  ret = timber_cond_init(&lg->cond_flush, NULL);
+  assert(ret && "cond_init");
+
   return true;
 fail_sem_empty:
   if (lg->log_policy == TIMBER_BLOCK_POLICY) {
-    ret = timber_sem_destroy(&lg->sem_empty_slots);
-    assert(ret && "timber_sem_destroy failed (sem_empty_slots)");
+    timber_sem_destroy(&lg->sem_empty_slots);
   }
 fail_sem_full:
-  ret = timber_sem_destroy(&lg->sem_full_slots);
-  assert(ret && "timber_sem_destroy failed (sem_full_slots)");
+  timber_sem_destroy(&lg->sem_full_slots);
 fail:
   lg->is_alive = false;
   return false;
 }
 
 bool timber_destroy(Timber *lg) {
-  timber_atomic_store(&lg->is_alive, false, timber_morder_relaxed);
-  if (!timber_sem_post(&lg->sem_full_slots)) {
-    _timber_report_error("sem_post");
-    return false;
-  }
-  void *thread_retval;
-  if (!timber_pthread_join(&lg->thread, &thread_retval)) {
-    _timber_report_error("pthread_join");
-    return false;
-  }
-  if (thread_retval == NULL) {
-    _timber_report_error("consumer thread");
-  }
+  if (!lg) return false;
+  bool all_ok = true;
 
-  if (!timber_sem_destroy(&lg->sem_full_slots)) {
-    _timber_report_error("sem_destroy(sem_full_slots)");
-    return false;
-  }
+  timber_atomic_store(&lg->is_alive, false, timber_morder_relaxed);
+  all_ok &= timber_sem_post(&lg->sem_full_slots);
+
+  void *thread_retval;
+  all_ok &= timber_pthread_join(&lg->thread, &thread_retval);
+
+#ifdef TIMBER_DEBUG
+  if (thread_retval == NULL) _timber_report_error("consumer thread");
+#endif
+
+  all_ok &= timber_sem_destroy(&lg->sem_full_slots);
 
   if (lg->log_policy == TIMBER_BLOCK_POLICY) {
-    if (!timber_sem_destroy(&lg->sem_empty_slots)) {
-      _timber_report_error("sem_destroy(sem_empty_slots)");
-      return false;
-    }
+    all_ok &= timber_sem_destroy(&lg->sem_empty_slots);
   }
+
+  all_ok &= timber_mutex_destroy(&lg->mtx_flush);
+  all_ok &= timber_cond_destroy(&lg->cond_flush);
 
   for (size_t i = 0; i < lg->sink_count; i++) {
     timber_fd_t sink = lg->sinks[i];
     #ifdef _WIN32
     if (sink == GetStdHandle(STD_OUTPUT_HANDLE) || sink == GetStdHandle(STD_ERROR_HANDLE)) continue;
-    CloseHandle(sink);
+    all_ok &= CloseHandle(sink);
     #else
     if (sink == STDOUT_FILENO || sink == STDERR_FILENO) continue;
-    close(sink);
+    all_ok &= (close(sink) == 0);
     #endif
   }
-  return true;
+  return all_ok;
 }
 
 Timber *timber_alloc(void) {
@@ -525,6 +634,10 @@ bool timber_add_stdout_sink(Timber *lg) {
   timber_fd_t stdout_fd = GetStdHandle(STD_OUTPUT_HANDLE);
   if (stdout_fd == INVALID_HANDLE_VALUE) {
     errno = _timber_win32_error_to_cerrno(); return false;
+  } else if (stdout_fd == NULL) {
+    // returns null on GUI programs
+    // pretend to be added
+    return true;
   }
 
 #else
@@ -541,7 +654,12 @@ bool timber_add_stderr_sink(Timber *lg) {
   timber_fd_t stderr_fd = GetStdHandle(STD_ERROR_HANDLE);
   if (stderr_fd == INVALID_HANDLE_VALUE) {
     errno = _timber_win32_error_to_cerrno(); return false;
+  } else if (stderr_fd == NULL) {
+    // returns null on GUI programs
+    // pretend to be added
+    return true;
   }
+
 #else
   timber_fd_t stderr_fd = STDERR_FILENO;
 #endif

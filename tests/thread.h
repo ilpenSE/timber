@@ -8,7 +8,7 @@ typedef void *(*thread_routine_t)(void*);
 #include <process.h>
 typedef SECURITY_ATTRIBUTES thread_attr_t;
 
-typedef struct TimberThreadCtx {
+typedef struct {
   thread_routine_t start_routine;
   void *arg;
   void *retval;

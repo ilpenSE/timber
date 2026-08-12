@@ -294,6 +294,16 @@ TIMBER_API bool timber_destroy(Timber *lg);
 TIMBER_API bool timber_free(Timber *lg);
 
 /**
+ * @brief Flushes the current queue
+ * Blocks current thread until there're no messages left to process in consumer
+ *
+ * @param[in] lg Logger instance
+ *
+ * @return true if logger is alive/valid and all messages flushed out sucessfully false otherwise
+*/
+TIMBER_API bool timber_flush(Timber *lg);
+
+/**
  * @brief Converts a logging level to its string representation.
  *
  * @param[in] level Logging level.
