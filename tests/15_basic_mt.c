@@ -18,8 +18,8 @@ void *thread_func(void *ctx) {
 int main(void) {
   timber = timber_alloc();
 
-  if (!timber_init(timber)) return 1;
   timber_add_stdout_sink(timber);
+  if (!timber_init(timber)) return 1;
 
   printf("Creating %d threads\n", THREAD_COUNT);
   for (size_t i = 0; i < THREAD_COUNT; i++) {

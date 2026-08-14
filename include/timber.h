@@ -1,6 +1,6 @@
 /**
  * @file timber.h
- * @version 1.2.0
+ * @version 1.3.0
  * @brief Timber an asynchronous logging library.
  *
  * Timber is a lightweight asynchronous logging library supporting
@@ -43,13 +43,13 @@
 /**
  * @brief Timber version encoded as MAJOR_MINOR_PATCH.
  */
-#define TIMBER_VER 10200L
+#define TIMBER_VER 10300L
 
 /** @brief Timber major version. */
 #define TIMBER_MAJOR 1
 
 /** @brief Timber minor version. */
-#define TIMBER_MINOR 2
+#define TIMBER_MINOR 3
 
 /** @brief Timber patch version. */
 #define TIMBER_PATCH 0
@@ -60,12 +60,29 @@
 #define TIMBER_MAX_SINKS 8
 
 /**
+ * @brief Maximum amount of tokens can be in single format string
+ * $T, $$, $L, $M and other characters are one token
+ * Not every character is counted as single token
+ * For example: "$T [$L] $M" string's tokens are:
+ * TK_TIME, TK_LITERAL(" ["), TK_LEVEL, TK_LITERAL("] "), TK_MESSAGE
+*/
+#define TIMBER_MAX_TOKENS 20
+
+/**
  * @brief Maximum size of a single log message.
  * @detail Message in this context is already formatted message.
  * It doesn't mean format string. Also this limitation doesn't effect
  * format on consumer (second step of formatting which is adding level)
  */
 #define TIMBER_MAX_MSG_SIZE 256
+
+/**
+ * @brief Extra space for time, level and stuff in consumer.
+ * @detail If your format string is too big, increase this
+ * otherwise it'll truncate your message to fit format
+ * time, level or other literals.
+*/
+#define TIMBER_FORMAT_EXTRA 64
 
 /**
  * @brief Maximum number of messages processed in a single batch.
@@ -299,6 +316,7 @@ TIMBER_API bool timber_free(Timber *lg);
  *
  * @param[in] lg Logger instance
  *
+ * @since 1.2.0
  * @return true if logger is alive/valid and all messages flushed out sucessfully false otherwise
 */
 TIMBER_API bool timber_flush(Timber *lg);
@@ -363,15 +381,27 @@ TIMBER_API bool timber_add_stderr_sink(Timber *lg);
 TIMBER_API void timber_set_policy(Timber *lg, TimberPolicy policy);
 
 /**
- * @brief Sets the output format of a logger. (dummy function)
- * @todo not implemented (doesn't parse anything)
+ * @brief Parses format string for the logger instance.
+ * It has limited amount of tokens
+ * @see TIMBER_MAX_TOKENS
  *
  * @param[in] lg Logger instance.
  * @param[in] format Log format string.
+ *                   This format string describes the final message to sinks.
+ *                   There're 3 variables (placeholders) you can use: $T, $L and $M.
+ *                   You can escape dollar with '$$' this means literal '$'.
+ *                   Every placeholder and escaped dollar is a token.
+ *                   But escaped dollar contains literal characters behind it if they exist.
+ *                   Literal characters is interpreted as single token.
+ *                   For example this has 5 tokens:
+ *                   "$T [$L] $M" can be interpreted as
+ *                   TK_TIME, TK_LITERAL(" ["), TK_LEVEL, TK_LITERAL("] "), TK_MESSAGE
+ * @return true if parsing is successful false otherwise
+ * @since 1.3.0
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API void timber_set_format(Timber *lg, const char *format);
+TIMBER_API bool timber_set_format(Timber *lg, const char *format);
 
 /**
  * @brief Generates level-specific logging functions.

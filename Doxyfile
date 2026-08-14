@@ -2,7 +2,7 @@
 
 PROJECT_NAME           = "timber"
 PROJECT_BRIEF          = "Asynchronous, flexible logging library"
-PROJECT_NUMBER         = "1.1.1"
+PROJECT_NUMBER         = "1.3.0"
 
 GENERATE_HTML          = YES
 GENERATE_XML           = YES

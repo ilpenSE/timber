@@ -1,5 +1,3 @@
 # To-Do List for Timber
 
-- [x] Add tests to CMake
-- [x] Add batch-writing
-- [ ] Add message formatting
+- [-] Add message formatting (remaining: add formatting per sink)

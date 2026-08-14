@@ -2,13 +2,6 @@
 import subprocess
 import sys
 
-def run_cmd(cmd):
-  print(f"Command: { ' '.join(cmd) }")
-  try:
-    subprocess.run(cmd, check=True)
-  except subprocess.CalledProcessError as e:
-    print(f"ERROR: Command failed with {e.returncode}")
-
 TESTS = {
   "10_basic": {
     "std": "c11",
@@ -31,6 +24,12 @@ TESTS = {
   "37_cxx20": {
     "std": "c++20",
   },
+  "40_overflow": {
+    "std": "c11",
+  },
+  "50_empty": {
+    "std": "c11",
+  },
 }
 
 VARIANTS = ["O0", "O3", "ASAN", "TSAN"]
@@ -52,6 +51,13 @@ def usage():
   print("  --variant | -v <variant = O0>: Set target variant")
   print(f"    variant can be {VARIANTS}")
   print("  help: Print this help message")
+
+def run_cmd(cmd):
+  print(f"Command: { ' '.join(cmd) }")
+  try:
+    subprocess.run(cmd, check=True)
+  except subprocess.CalledProcessError as e:
+    print(f"ERROR: Command failed with {e.returncode}")
 
 def shift(argv):
   if not argv:
@@ -91,12 +97,14 @@ def get_compiler(platform, is_cxx):
 
 def get_flags_from_variant(variant):
   match variant:
-    case "O0": return "-O0"
-    case "O3": return "-O3"
+    case "O0": return ["-O0"]
+    case "O3": return ["-O3"]
     case "ASAN":
-      return "-fsanitize=undefined,address -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
-    case "TSAN": return "-fsanitize=undefined,thread"
-    case _: return "<unknown>"
+      return ["-fno-omit-frame-pointer",
+              "-fno-sanitize-recover=undefined",
+              "-fsanitize=undefined,address"]
+    case "TSAN": return ["-fsanitize=undefined,thread"]
+    case _: return []
 
 # Setup environment
 mkdir_cmd = ["mkdir", "-p", f"build/{PLATFORM}/{VARIANT}"]
@@ -115,9 +123,12 @@ def compile_test_all(variant, platform):
       "-o", f"build/{platform}/{VARIANT}/{file_name}",
       f"{file_name}{ext}",
       "-I../build/", "-g", "-DTIMBER_IMPLEMENTATION",
-      f"-std={std}", f"-D_POSIX_C_SOURCE=200809L",
-      f"{get_flags_from_variant(VARIANT)}"
+      f"-std={std}"
     ]
+    compile_cmd.extend(get_flags_from_variant(VARIANT))
+    if platform == "linux":
+      compile_cmd.append("-D_POSIX_C_SOURCE=200809L")
+
     if is_cxx:
       compile_cmd.append("-I../bindings/c++")
     run_cmd(compile_cmd)

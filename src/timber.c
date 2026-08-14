@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdalign.h>
+#include <time.h>
 
 #define TIMBER_TODO(fmt, ...)             \
   do {                                    \
@@ -154,7 +155,7 @@ static inline bool timber_pthread_create(timber_pthread_t *pthread,
 static inline bool timber_pthread_join(timber_pthread_t *pthread, void **retval) {
   if (WaitForSingleObject(pthread->handle, INFINITE) != WAIT_OBJECT_0) return false;
   if (!CloseHandle(pthread->handle)) return false;
-  *retval = pthread->retval;
+  if (retval) *retval = pthread->retval;
   return true;
 }
 
@@ -290,13 +291,32 @@ struct TimberQueue {
   alignas(64) TIMBER_ATOMIC(size_t) tail;
 };
 
+typedef enum {
+  _TIMBER_TK_LITERAL = 0,
+  _TIMBER_TK_TIME,
+  _TIMBER_TK_LEVEL,
+  _TIMBER_TK_MESSAGE,
+  _TimberTokenType_count,
+} TimberTokenType;
+
+struct TimberToken {
+  TimberTokenType type;
+  const char *lit;
+  size_t lit_count;
+};
+
+struct TimberFormat {
+  struct TimberToken tokens[TIMBER_MAX_TOKENS];
+  size_t token_count;
+};
+
 struct Timber {
   alignas(64) TIMBER_ATOMIC(bool) is_alive;
   struct TimberQueue queue;
+  struct TimberFormat format;
   timber_pthread_t thread;
   timber_fd_t sinks[TIMBER_MAX_SINKS]; // array of fds/HANDLEs
   size_t sink_count;
-  const char *format;
   // the signal which is used for producers to signal consumer
   timber_sem_t sem_full_slots;
   // the signal which is used for consumer signals to producers for an empty slot (only for TIMBER_BLOCK_POLICY)
@@ -305,7 +325,6 @@ struct Timber {
   timber_mutex_t mtx_flush;
   timber_cond_t  cond_flush;
   TimberPolicy log_policy;
-  // TODO: Add format string and parsing
 };
 
 #ifdef TIMBER_DEBUG
@@ -327,16 +346,96 @@ struct Timber {
 #define _timber_report_error(function) (void)(function)
 #endif
 
-static size_t _timber_format_msg(struct TimberPayload *payload, char *out, size_t outsz) {
-  const char *level_str = timber_level_to_cstr(payload->level);
-  int n = snprintf(out, outsz, "%s: %.*s\n", level_str, (int)payload->msg_count, payload->msg);
-  if (n < 0) {
-    errno = EINVAL; return -1;
-  } else if ((size_t)n >= outsz) {
-    n = outsz - 1;
-    out[outsz - 2] = '\n'; // guaranteed new line
+// Helper for adding token to TimberFormat
+static bool _timber_add_fmt_token(struct TimberFormat *format,
+                                  TimberTokenType type,
+                                  const char *lit, size_t lit_count)
+{
+  if (format->token_count >= TIMBER_MAX_TOKENS) return false;
+  format->tokens[format->token_count++] = (struct TimberToken){type, lit, lit_count};
+  return true;
+}
+
+static void _timber_append_buf(char *out, size_t *outcnt, size_t outsz, const char *in, size_t incnt) {
+  if (*outcnt + incnt > outsz) incnt = outsz - *outcnt;
+  memcpy(out + (*outcnt), in, incnt);
+  *outcnt += incnt;
+}
+
+// Manual writes for _timber_get_time
+static inline void _timber_time_write2(char* p, int v) {
+  p[0] = (char)('0' + v / 10); p[1] = (char)('0' + v % 10);
+}
+static inline void _timber_time_write4(char* p, int v) {
+  _timber_time_write2(p, v / 100); _timber_time_write2(p + 2, v % 100);
+}
+static inline void _timber_time_write3(char* p, int v) {
+  p[0] = (char)('0' + v / 100);
+  p[1] = (char)('0' + (v / 10) % 10);
+  p[2] = (char)('0' + v % 10);
+}
+
+static size_t _timber_get_time(char *buf, size_t bufsz) {
+  static _Thread_local struct tm cached_tm;
+  static _Thread_local time_t cached_now;
+
+  time_t now = time(0);
+  if (now != cached_now) {
+#ifdef _WIN32
+    if (localtime_s(&cached_tm, &now) != 0) return 0;
+#else
+    if (!localtime_r(&now, &cached_tm)) return 0;
+#endif
+    cached_now = now;
   }
-  return (size_t)n;
+
+  // 14-08-2026 20:45:00
+  size_t n = 0;
+  _timber_time_write2(buf + n, cached_tm.tm_mday); n += 2;
+  buf[n++] = '-';
+  _timber_time_write2(buf + n, cached_tm.tm_mon + 1); n += 2;
+  buf[n++] = '-';
+  _timber_time_write4(buf + n, cached_tm.tm_year + 1900); n += 4;
+  buf[n++] = ' ';
+  _timber_time_write2(buf + n, cached_tm.tm_hour); n += 2;
+  buf[n++] = ':';
+  _timber_time_write2(buf + n, cached_tm.tm_min); n += 2;
+  buf[n++] = ':';
+  _timber_time_write2(buf + n, cached_tm.tm_sec); n += 2;
+  return n;
+}
+
+static size_t _timber_format_msg(struct TimberFormat *format,
+                                 struct TimberPayload *payload,
+                                 char *out, size_t outsz)
+{
+  size_t outcnt = 0;
+  const char *level_str = timber_level_to_cstr(payload->level);
+  size_t level_cnt = strlen(level_str);
+
+  for (size_t i = 0; i < format->token_count; i++) {
+    struct TimberToken tok = format->tokens[i];
+    switch (tok.type) {
+    case _TIMBER_TK_TIME: {
+      char buffer[24];
+      size_t n = _timber_get_time(buffer, sizeof(buffer));
+      _timber_append_buf(out, &outcnt, outsz, buffer, n);
+    } break;
+    case _TIMBER_TK_LEVEL: {
+      _timber_append_buf(out, &outcnt, outsz, level_str, level_cnt);
+    } break;
+    case _TIMBER_TK_MESSAGE: {
+      _timber_append_buf(out, &outcnt, outsz, payload->msg, payload->msg_count);
+    } break;
+    case _TIMBER_TK_LITERAL: {
+      _timber_append_buf(out, &outcnt, outsz, tok.lit, tok.lit_count);
+    } break;
+    default: return -1;
+    }
+  }
+
+  out[outcnt++] = '\n';
+  return outcnt;
 }
 
 static void *_timber_consumer(void *ctxptr) {
@@ -346,7 +445,7 @@ static void *_timber_consumer(void *ctxptr) {
 #ifdef TIMBER_DEBUG
   size_t processed = 0;
 #endif
-  char buffers[TIMBER_MAX_BATCH][TIMBER_MAX_MSG_SIZE + 64];
+  char buffers[TIMBER_MAX_BATCH][TIMBER_MAX_MSG_SIZE + TIMBER_FORMAT_EXTRA + 1];
   timber_iovec vecs[TIMBER_MAX_BATCH];
   int vec_count = 0;
 
@@ -363,7 +462,6 @@ static void *_timber_consumer(void *ctxptr) {
     }
 
     // Process payload
-    // TODO: Add formating
     size_t start_pos = timber_atomic_load(&q->tail, timber_morder_relaxed);
     size_t batch_count = 0;
     while (batch_count < TIMBER_MAX_BATCH) {
@@ -382,7 +480,7 @@ static void *_timber_consumer(void *ctxptr) {
       timber_atomic_store(&s->seq, start_pos + i + TIMBER_QUEUE_SIZE, timber_morder_release);
       if (ctx->log_policy == TIMBER_BLOCK_POLICY) timber_sem_post(&ctx->sem_empty_slots);
 
-      size_t count = _timber_format_msg(&payload, buffers[i], sizeof(buffers[i]));
+      size_t count = _timber_format_msg(&ctx->format, &payload, buffers[i], sizeof(buffers[i]));
       if (count == -1) {
         _timber_debug_err("[Consumer] Couldn't format a message, dropping it");
         continue;
@@ -475,8 +573,9 @@ bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz) {
     errno = EPIPE; return false;
   }
 
+  // Truncate if it's too big
   if (msgsz > TIMBER_MAX_MSG_SIZE) {
-    errno = EINVAL; return false;
+    msgsz = TIMBER_MAX_MSG_SIZE;
   }
 
   // CAS loop for claiming slot
@@ -547,6 +646,15 @@ bool timber_init(Timber *lg) {
   assert(ret && "mutex_init");
   ret = timber_cond_init(&lg->cond_flush, NULL);
   assert(ret && "cond_init");
+
+  // Default format style: $T [$L] $M
+  if (lg->format.token_count == 0) {
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_TIME, NULL, 0);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, " [", 2);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LEVEL, NULL, 0);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, "] ", 2);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_MESSAGE, NULL, 0);
+  }
 
   return true;
 fail_sem_empty:
@@ -671,8 +779,54 @@ bool timber_add_stderr_sink(Timber *lg) {
 void timber_set_policy(Timber *lg, TimberPolicy policy)
 { if (!lg) return; lg->log_policy = policy; }
 
-void timber_set_format(Timber *lg, const char *format)
-{ if (!lg) return; lg->format = format; }
+bool timber_set_format(Timber *lg, const char *fmt)
+{
+  if (!lg) return false;
+  const char *pfmt = fmt;
+  size_t sfmt = strlen(fmt);
+
+  while (sfmt > 0) {
+    const char *found = (const char *)memchr(pfmt, '$', sfmt);
+    if (found) {
+      size_t amount = (size_t)(found - pfmt);
+      if (amount == sfmt - 1) {
+        _timber_debug_err("Unexpected end of string in format");
+        return false;
+      }
+      const char var_ch = *(found + 1);
+
+      if (var_ch == '$') {
+        if (!_timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, pfmt, amount + 1)) return false;
+      } else {
+        assert(var_ch != '$');
+
+        if (amount > 0) {
+          if (!_timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, pfmt, amount)) return false;
+        }
+
+        TimberTokenType tk_type;
+        switch (var_ch) {
+        case 'T': tk_type = _TIMBER_TK_TIME; break;
+        case 'L': tk_type = _TIMBER_TK_LEVEL; break;
+        case 'M': tk_type = _TIMBER_TK_MESSAGE; break;
+        default:
+          _timber_debug_err("Invalid variable in format: '%c'\n", var_ch);
+          return false;
+        }
+        if (!_timber_add_fmt_token(&lg->format, tk_type, NULL, 0)) return false;
+      }
+
+      pfmt += amount + 2;
+      sfmt -= amount + 2;
+    } else {
+      if (!_timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, pfmt, sfmt)) {
+        return false;
+      }
+      sfmt = 0;
+    }
+  }
+  return true;
+}
 
 #ifdef _MSC_VER
 #define _TIMBER_UNREACHABLE(fmt, ...)            \

@@ -33,6 +33,8 @@ target_compile_options(timber_shared PRIVATE
 target_compile_definitions(timber_shared
   PRIVATE TIMBER_BUILD
   PUBLIC  TIMBER_SHARED
+  PRIVATE $<$<CONFIG:Debug>:TIMBER_DEBUG>
+  PRIVATE $<$<CONFIG:Release>:TIMBER_RELEASE>
 )
 
 set_target_properties(timber_shared PROPERTIES
@@ -49,6 +51,11 @@ target_include_directories(timber_static PUBLIC
 
 target_compile_options(timber_static PRIVATE
   $<$<C_COMPILER_ID:MSVC>:/experimental:c11atomics>
+)
+
+target_compile_definitions(timber_static PRIVATE
+  $<$<CONFIG:Debug>:TIMBER_DEBUG>
+  $<$<CONFIG:Release>:TIMBER_RELEASE>
 )
 
 if (MSVC)

@@ -22,9 +22,9 @@ static inline unsigned __stdcall _thread_trampoline(void *cp) {
 }
 
 static inline bool thread_create(thread_t *th,
-                                         const thread_attr_t *attr,
-                                         thread_routine_t start_routine,
-                                         void *arg)
+                                 const thread_attr_t *attr,
+                                 thread_routine_t start_routine,
+                                 void *arg)
 {
   th->start_routine = start_routine;
   th->arg = arg;
@@ -39,7 +39,7 @@ static inline bool thread_create(thread_t *th,
 static inline bool thread_join(thread_t *th, void **retval) {
   if (WaitForSingleObject(th->handle, INFINITE) != WAIT_OBJECT_0) return false;
   if (!CloseHandle(th->handle)) return false;
-  *retval = th->retval;
+  if (retval) *retval = th->retval;
   return true;
 }
 
