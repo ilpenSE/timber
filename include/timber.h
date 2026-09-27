@@ -40,19 +40,20 @@
   #define TIMBER_DEBUG 1
 #endif
 
-/**
- * @brief Timber version encoded as MAJOR_MINOR_PATCH.
- */
-#define TIMBER_VER 10300L
+/** @brief Timber version string. */
+#define TIMBER_VERSION "2.0.0"
+
+/** @brief Timber version encoded as MAJOR_MINOR_PATCH. */
+#define TIMBER_VERSION_FULL 20000L
 
 /** @brief Timber major version. */
-#define TIMBER_MAJOR 1
+#define TIMBER_VERSION_MAJOR 2
 
 /** @brief Timber minor version. */
-#define TIMBER_MINOR 3
+#define TIMBER_VERSION_MINOR 0
 
 /** @brief Timber patch version. */
-#define TIMBER_PATCH 0
+#define TIMBER_VERSION_PATCH 0
 
 /**
  * @brief Maximum number of sinks that can be attached to a logger.
@@ -246,7 +247,6 @@ TIMBER_API bool timber_init(Timber *lg);
  */
 TIMBER_API bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz);
 
-
 /**
  * @brief Logs a null-terminated message.
  *
@@ -258,7 +258,6 @@ TIMBER_API bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size
  * @note @p msg MUST BE NULL TERMINATED! Because it calls strlen()
  */
 TIMBER_API bool timber_log(Timber *lg, TimberLevel level, const char *msg);
-
 
 /**
  * @brief Logs a printf-style formatted message.

@@ -1,4 +1,4 @@
-// C++ bindings (syntax sugar and formatting) for timber.h - v1.3.0
+// C++ bindings (syntax sugar and formatting) for timber.h - v2.0.0
 #ifndef TIMBER_HPP
 #define TIMBER_HPP
 
