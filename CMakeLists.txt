@@ -9,21 +9,11 @@ set(CMAKE_CXX_EXTENSIONS ON)
 
 project(Timber LANGUAGES C CXX)
 
-set(TEST_SOURCES
-  tests/10_basic.c
-  tests/15_basic_mt.c
-  tests/20_stress_test_st.c
-  tests/25_stress_test_mt.c
-  tests/30_cxx11.cpp
-  tests/35_cxx17.cpp
-  tests/37_cxx20.cpp
-)
-
 # Shared (dynamic) library
 add_library(timber_shared SHARED src/timber.c)
 target_include_directories(timber_shared PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
 )
 
 target_compile_options(timber_shared PRIVATE

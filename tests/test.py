@@ -133,6 +133,7 @@ def compile_test_all(variant, platform):
       compile_cmd.append("-I../bindings/c++")
     run_cmd(compile_cmd)
 
+
 def run_test_all(emulator, variant, platform):
   for file_name, opts in TESTS.items():
     cmd = []
@@ -140,6 +141,10 @@ def run_test_all(emulator, variant, platform):
       cmd.append(emulator)
     cmd.append(f"./build/{platform}/{variant}/{file_name}{'.exe' if emulator == 'wine' else ''}")
     run_cmd(cmd)
+    print("")
 
 compile_test_all(VARIANT, PLATFORM)
+print("")
+print("===== RUNNING =====")
+print("")
 run_test_all(None if PLATFORM == "linux" else "wine", VARIANT, PLATFORM)
