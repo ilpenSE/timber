@@ -304,11 +304,9 @@ TIMBER_API bool timber_destroy(Timber *lg);
  *
  * @param[in] lg Logger instance.
  *
- * @return true if the logger was successfully freed, false otherwise.
- *
  * @see timber_alloc()
  */
-TIMBER_API bool timber_free(Timber *lg);
+TIMBER_API void timber_free(Timber *lg);
 
 /**
  * @brief Flushes the current queue
@@ -336,11 +334,11 @@ TIMBER_API const char *timber_level_to_cstr(TimberLevel level);
  * @param[in] lg Logger instance.
  * @param[in] file_path Path of the output file.
  *
- * @return true if the sink was added, false otherwise.
+ * @return Pointer to instance which passed by @p lg if succeed, NULL otherwise
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API bool timber_add_file_sink(Timber *lg, const char *file_path);
+TIMBER_API Timber *timber_add_file_sink(Timber *lg, const char *file_path);
 /** @brief Alias for timber_add_file_sink */
 #define timber_add_file timber_add_file_sink
 
@@ -349,11 +347,11 @@ TIMBER_API bool timber_add_file_sink(Timber *lg, const char *file_path);
  *
  * @param[in] lg Logger instance.
  *
- * @return true if the sink was added, false otherwise.
+ * @return Pointer to instance which passed by @p lg if succeed, NULL otherwise
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API bool timber_add_stdout_sink(Timber *lg);
+TIMBER_API Timber *timber_add_stdout_sink(Timber *lg);
 /** @brief Alias for timber_add_stdout_sink */
 #define timber_add_stdout timber_add_stdout_sink
 
@@ -362,11 +360,11 @@ TIMBER_API bool timber_add_stdout_sink(Timber *lg);
  *
  * @param[in] lg Logger instance.
  *
- * @return true if the sink was added, false otherwise.
+ * @return Pointer to instance which passed by @p lg if succeed, NULL otherwise
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API bool timber_add_stderr_sink(Timber *lg);
+TIMBER_API Timber *timber_add_stderr_sink(Timber *lg);
 /** @brief Alias for timber_add_stderr_sink */
 #define timber_add_stderr timber_add_stderr_sink
 
@@ -375,10 +373,11 @@ TIMBER_API bool timber_add_stderr_sink(Timber *lg);
  *
  * @param[in] lg Logger instance.
  * @param[in] policy Queue-full policy.
+ * @return Pointer to instance which passed by @p lg if succeed, NULL otherwise
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API void timber_set_policy(Timber *lg, TimberPolicy policy);
+TIMBER_API Timber *timber_set_policy(Timber *lg, TimberPolicy policy);
 
 /**
  * @brief Parses format string for the logger instance.
@@ -396,12 +395,12 @@ TIMBER_API void timber_set_policy(Timber *lg, TimberPolicy policy);
  *                   For example this has 5 tokens:
  *                   "$T [$L] $M" can be interpreted as
  *                   TK_TIME, TK_LITERAL(" ["), TK_LEVEL, TK_LITERAL("] "), TK_MESSAGE
- * @return true if parsing is successful false otherwise
+ * @return Pointer to instance which passed by @p lg if succeed, NULL otherwise
  * @since 1.3.0
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API bool timber_set_format(Timber *lg, const char *format);
+TIMBER_API Timber *timber_set_format(Timber *lg, const char *format);
 
 /**
  * @brief Generates level-specific logging functions.

@@ -1,7 +1,7 @@
 #include <timber.hpp>
 
 int main() {
-  timber::Timber inst(TIMBER_BLOCK_POLICY);
+  timber::Timber inst(TIMBER_BLOCK_POLICY, "$T $L: $M");
   inst.add_sink(stdout);
   if (!inst.init()) {
     return 1;

@@ -97,7 +97,7 @@ TIMBER_LEVELS
 #endif // __cplusplus
 
   bool add_sink(const char *file_path) {
-    return timber_add_file_sink(m_inst, file_path);
+    return timber_add_file_sink(m_inst, file_path) ? true : false;
   }
 
   bool add_sink(FILE *file) {
