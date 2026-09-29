@@ -299,9 +299,11 @@ typedef enum {
   _TimberTokenType_count,
 } TimberTokenType;
 
+#define _TIMBER_MAX_FORMAT_LIT_SIZE 16
+
 struct TimberToken {
   TimberTokenType type;
-  const char *lit;
+  char lit[_TIMBER_MAX_FORMAT_LIT_SIZE];
   size_t lit_count;
 };
 
@@ -311,7 +313,6 @@ struct TimberFormat {
 };
 
 struct TimberSink {
-  const char *file_path;
   timber_fd_t fd;
 };
 
@@ -356,8 +357,25 @@ static bool _timber_add_fmt_token(struct TimberFormat *format,
                                   TimberTokenType type,
                                   const char *lit, size_t lit_count)
 {
-  if (format->token_count >= TIMBER_MAX_TOKENS) return false;
-  format->tokens[format->token_count++] = (struct TimberToken){type, lit, lit_count};
+  if (type != _TIMBER_TK_LITERAL) {
+    if (format->token_count >= TIMBER_MAX_TOKENS) return false;
+    format->tokens[format->token_count++] = (struct TimberToken){type};
+    return true;
+  }
+  if (lit_count == 0) return true;
+
+  size_t needed = (lit_count + _TIMBER_MAX_FORMAT_LIT_SIZE - 1) / _TIMBER_MAX_FORMAT_LIT_SIZE;
+  if (format->token_count + needed > TIMBER_MAX_TOKENS) return false;
+
+  for (size_t off = 0; off < lit_count; off += _TIMBER_MAX_FORMAT_LIT_SIZE) {
+    size_t n = lit_count - off;
+    if (n > _TIMBER_MAX_FORMAT_LIT_SIZE) n = _TIMBER_MAX_FORMAT_LIT_SIZE;
+
+    struct TimberToken *t = &format->tokens[format->token_count++];
+    t->type = _TIMBER_TK_LITERAL;
+    t->lit_count = n;
+    memcpy(t->lit, lit + off, n);
+  }
   return true;
 }
 
@@ -488,7 +506,7 @@ static void *_timber_consumer(void *ctxptr)
       timber_atomic_store(&s->seq, start_pos + i + TIMBER_QUEUE_SIZE, timber_morder_release);
       if (ctx->log_policy == TIMBER_BLOCK_POLICY) timber_sem_post(&ctx->sem_empty_slots);
 
-      size_t count = _timber_format_msg(&ctx->format, &payload, buffers[i], sizeof(buffers[i]));
+      size_t count = _timber_format_msg(&ctx->format, &payload, buffers[i], sizeof(buffers[i]) - 1);
       if (count == -1) {
         _timber_debug_err("[Consumer] Couldn't format a message, dropping it");
         continue;
@@ -644,6 +662,15 @@ bool timber_init(Timber *lg)
     }
   }
 
+  // Default format style: $T [$L] $M
+  if (lg->format.token_count == 0) {
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_TIME, NULL, 0);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, " [", 2);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LEVEL, NULL, 0);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, "] ", 2);
+    _timber_add_fmt_token(&lg->format, _TIMBER_TK_MESSAGE, NULL, 0);
+  }
+
   // Create thread (error when resources aren't available)
   if (!timber_pthread_create(&lg->thread, NULL, _timber_consumer, lg)) {
     _timber_report_error("pthread_create");
@@ -660,15 +687,6 @@ bool timber_init(Timber *lg)
   assert(ret && "mutex_init");
   ret = timber_cond_init(&lg->cond_flush, NULL);
   assert(ret && "cond_init");
-
-  // Default format style: $T [$L] $M
-  if (lg->format.token_count == 0) {
-    _timber_add_fmt_token(&lg->format, _TIMBER_TK_TIME, NULL, 0);
-    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, " [", 2);
-    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LEVEL, NULL, 0);
-    _timber_add_fmt_token(&lg->format, _TIMBER_TK_LITERAL, "] ", 2);
-    _timber_add_fmt_token(&lg->format, _TIMBER_TK_MESSAGE, NULL, 0);
-  }
 
   return true;
 fail_sem_empty:
@@ -736,28 +754,25 @@ Timber *timber_add_file_sink(Timber *lg, const char *file_path)
 {
   if (lg->sink_count >= TIMBER_MAX_SINKS) { errno = ERANGE; return NULL; }
 
-  // If the same file path exists, dont create it, return earlier
-  for (size_t i = 0; i < lg->sink_count; i++) {
-    if (strcmp(lg->sinks[i].file_path, file_path) == 0) return lg;
-  }
-
   timber_fd_t fd;
 #ifdef _WIN32
   WCHAR *wfile_path = _timber_win32_utf8_to_wide(file_path);
-  if (!wfile_path) { return NULL; }
-  fd = CreateFileW(wfile_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (!wfile_path) { errno = EINVAL; return NULL; }
+  fd = CreateFileW(wfile_path, FILE_APPEND_DATA,
+                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                   NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
   free(wfile_path);
   if (fd == INVALID_HANDLE_VALUE) {
+    errno = _timber_win32_error_to_cerrno();
     _timber_report_error("CreateFileW");
-    errno = _timber_win32_error_to_cerrno(); return NULL;
+    return NULL;
   }
 #else
-  fd = open(file_path, O_WRONLY | O_CREAT, 0640);
+  fd = open(file_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0640);
   if (fd < 0) { _timber_report_error("open"); return NULL; }
 #endif
 
   struct TimberSink *s = &lg->sinks[lg->sink_count++];
-  s->file_path = file_path;
   s->fd = fd;
   return lg;
 }
@@ -769,7 +784,9 @@ Timber *timber_add_stdout_sink(Timber *lg)
 #ifdef _WIN32
   timber_fd_t stdout_fd = GetStdHandle(STD_OUTPUT_HANDLE);
   if (stdout_fd == INVALID_HANDLE_VALUE) {
-    errno = _timber_win32_error_to_cerrno(); return NULL;
+    errno = _timber_win32_error_to_cerrno();
+    _timber_report_error("GetStdHandle(STD_OUTPUT_HANDLE)");
+    return NULL;
   } else if (stdout_fd == NULL) {
     // returns null on GUI programs
     // pretend to be added
@@ -779,13 +796,8 @@ Timber *timber_add_stdout_sink(Timber *lg)
   timber_fd_t stdout_fd = STDOUT_FILENO;
 #endif
 
-  for (size_t i = 0; i < lg->sink_count; i++) {
-    if (lg->sinks[i].fd == stdout_fd) return lg;
-  }
-
   struct TimberSink *s = &lg->sinks[lg->sink_count++];
   s->fd = stdout_fd;
-  s->file_path = NULL;
   return lg;
 }
 
@@ -796,7 +808,9 @@ Timber *timber_add_stderr_sink(Timber *lg)
 #ifdef _WIN32
   timber_fd_t stderr_fd = GetStdHandle(STD_ERROR_HANDLE);
   if (stderr_fd == INVALID_HANDLE_VALUE) {
-    errno = _timber_win32_error_to_cerrno(); return NULL;
+    errno = _timber_win32_error_to_cerrno();
+    _timber_report_error("GetStdHandle(STD_ERROR_HANDLE)");
+    return NULL;
   } else if (stderr_fd == NULL) {
     // returns null on GUI programs
     // pretend to be added
@@ -806,13 +820,8 @@ Timber *timber_add_stderr_sink(Timber *lg)
   timber_fd_t stderr_fd = STDERR_FILENO;
 #endif
 
-  for (size_t i = 0; i < lg->sink_count; i++) {
-    if (lg->sinks[i].fd == stderr_fd) return lg;
-  }
-
   struct TimberSink *s = &lg->sinks[lg->sink_count++];
   s->fd = stderr_fd;
-  s->file_path = NULL;
   return lg;
 }
 
@@ -826,6 +835,7 @@ Timber *timber_set_policy(Timber *lg, TimberPolicy policy)
 Timber *timber_set_format(Timber *lg, const char *fmt)
 {
   if (!lg) return NULL;
+  lg->format.token_count = 0;
   const char *pfmt = fmt;
   size_t sfmt = strlen(fmt);
 
