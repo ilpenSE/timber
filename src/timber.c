@@ -43,6 +43,8 @@
 #define timber_atomic_load ::std::atomic_load_explicit
 #define timber_atomic_fetch_add ::std::atomic_fetch_add_explicit
 #define timber_atomic_cas_weak ::std::atomic_compare_exchange_weak_explicit
+#define TIMBER_THREAD_LOCAL thread_local
+
 #else
 #include <stdatomic.h>
 #define TIMBER_ATOMIC(T) _Atomic(T)
@@ -54,6 +56,7 @@
 #define timber_atomic_load atomic_load_explicit
 #define timber_atomic_fetch_add atomic_fetch_add_explicit
 #define timber_atomic_cas_weak atomic_compare_exchange_weak_explicit
+#define TIMBER_THREAD_LOCAL _Thread_local
 #endif
 
 // POSIX/Windows abstraction
@@ -401,8 +404,8 @@ static inline void _timber_time_write3(char* p, int v) {
 
 static size_t _timber_get_time(char *buf, size_t bufsz)
 {
-  static _Thread_local struct tm cached_tm;
-  static _Thread_local time_t cached_now;
+  static TIMBER_THREAD_LOCAL struct tm cached_tm;
+  static TIMBER_THREAD_LOCAL time_t cached_now;
 
   time_t now = time(0);
   if (now != cached_now) {

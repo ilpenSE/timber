@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# WINEPATH="/usr/x86_64-w64-mingw32/bin"
 import subprocess
 import sys
 
@@ -132,7 +133,6 @@ def compile_test_all(variant, platform):
     if is_cxx:
       compile_cmd.append("-I../bindings/c++")
     run_cmd(compile_cmd)
-
 
 def run_test_all(emulator, variant, platform):
   for file_name, opts in TESTS.items():
