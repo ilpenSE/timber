@@ -334,6 +334,7 @@ struct Timber {
   timber_mutex_t mtx_flush;
   timber_cond_t  cond_flush;
   TimberPolicy log_policy;
+  TimberMode backend;
 };
 
 #ifdef TIMBER_DEBUG
@@ -652,6 +653,11 @@ bool timber_init(Timber *lg)
   bool ret;
   lg->is_alive = true;
 
+  if (lg->backend != TIMBER_SEM_ATOMICS_RING) {
+    _timber_report_error("lg->backend must be TIMBER_SEM_ATOMICS_RING (for now)");
+    goto fail;
+  }
+
   // Create semaphores (error when resources aren't available)
   if (!timber_sem_init(&lg->sem_full_slots, 0, 0)) {
     _timber_report_error("sem_init(sem_full_slots)");
@@ -832,6 +838,13 @@ Timber *timber_set_policy(Timber *lg, TimberPolicy policy)
 {
   if (!lg) return NULL;
   lg->log_policy = policy;
+  return lg;
+}
+
+Timber *timber_set_mode(Timber *lg, TimberMode mode)
+{
+  if (!lg) return NULL;
+  lg->backend = mode;
   return lg;
 }
 

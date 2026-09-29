@@ -1,6 +1,6 @@
 /**
  * @file timber.h
- * @version 1.3.0
+ * @version 2.0.0
  * @brief Timber an asynchronous logging library.
  *
  * Timber is a lightweight asynchronous logging library supporting
@@ -149,6 +149,7 @@ typedef struct Timber Timber;
 /**
  * @enum TimberLevel
  * @brief Logging severity levels.
+ * @see TIMBER_LEVELS
  */
 typedef enum {
   #define X(_, name) TIMBER_##name,
@@ -156,6 +157,20 @@ typedef enum {
   #undef X
   _TimberLevel_count,
 } TimberLevel;
+
+/**
+ * @enum TimberMode
+ * @brief Logger backend/logic mode.
+ * @since 2.0.0
+*/
+typedef enum {
+  /**
+  * @brief Default behavior, uses semaphores for thread synchronization,
+  * atomics for data synchronization and MPSC Vyukov lock-free ring buffer to store logs
+  */
+  TIMBER_SEM_ATOMICS_RING = 0,
+  _TimberMode_count,
+} TimberMode;
 
 /**
  * @enum TimberPolicy
@@ -265,7 +280,7 @@ TIMBER_API bool timber_log(Timber *lg, TimberLevel level, const char *msg);
  * @param[in] lg Logger instance.
  * @param[in] level Logging level.
  * @param[in] fmt printf-style format string.
- * @param[in] ... Arguments referenced by @p fmt.
+ * @param[in] ... Variadic arguments referenced by @p fmt.
  *
  * @return true if the message was pushed to queue, false otherwise.
  */
@@ -377,6 +392,19 @@ TIMBER_API Timber *timber_add_stderr_sink(Timber *lg);
  * **THREAD-UNSAFE**
  */
 TIMBER_API Timber *timber_set_policy(Timber *lg, TimberPolicy policy);
+
+/**
+ * @brief Sets the mode the working logic/backend of the logger.
+ *
+ * @param[in] lg Logger instance.
+ * @param[in] mode Mode enumeration, @see TimberMode
+ * @return Pointer to instance which passed by @p lg if succeed, NULL otherwise
+ *
+ * @since 2.0.0
+ * @note DO NOT use this after initialization of the instance!
+ * **THREAD-UNSAFE**
+ */
+TIMBER_API Timber *timber_set_mode(Timber *lg, TimberMode mode);
 
 /**
  * @brief Parses format string for the logger instance.
