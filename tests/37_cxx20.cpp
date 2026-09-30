@@ -1,8 +1,8 @@
 #include <timber.hpp>
 
 int main() {
-  timber::Timber lg;
-  lg.add_sink(stdout);
+  timber::Instance lg;
+  lg.add_stdout();
   if (!lg.init()) return 1;
   lg.info("Hello, {}!", "Formatted");
 }

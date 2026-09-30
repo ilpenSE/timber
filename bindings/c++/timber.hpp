@@ -45,23 +45,23 @@ public:
   }
 
 private:
-  ::Timber* m_ctx;
+  ::Timber *m_ctx;
   ::TimberLevel m_level;
   std::ostringstream m_buffer;
 };
 
-class Timber {
+class Instance {
 public:
-  Timber(TimberPolicy policy = TIMBER_DROP_POLICY, const char *format = "") {
+  Instance(TimberPolicy policy = TIMBER_DROP_POLICY, const char *format = nullptr) {
     m_inst = timber_alloc();
     timber_set_policy(m_inst, policy);
-    timber_set_format(m_inst, format);
+    if (format) timber_set_format(m_inst, format);
   }
-  ~Timber() { if (m_is_initialized) timber_destroy(m_inst); timber_free(m_inst); }
-  Timber(const Timber&) = delete;
-  Timber& operator =(const Timber&) = delete;
-  Timber(Timber&&) = delete;
-  Timber& operator =(Timber&&) = delete;
+  ~Instance() { if (m_is_initialized) timber_destroy(m_inst); timber_free(m_inst); }
+  Instance(const Instance&) = delete;
+  Instance& operator =(const Instance&) = delete;
+  Instance(Instance&&) = delete;
+  Instance& operator =(Instance&&) = delete;
 
   bool init() {
     m_is_initialized = timber_init(m_inst);
@@ -96,15 +96,34 @@ TIMBER_LEVELS
 #undef X
 #endif // __cplusplus
 
-  bool add_sink(const char *file_path) {
-    return timber_add_file_sink(m_inst, file_path) ? true : false;
+  Instance *add_sink(const char *file_path) {
+    if (!timber_add_file_sink(m_inst, file_path)) return nullptr;
+    return this;
   }
 
-  bool add_sink(FILE *file) {
-    if (file == stdout) timber_add_stdout_sink(m_inst);
-    else if (file == stderr) timber_add_stderr_sink(m_inst);
-    else return false;
-    return true;
+  Instance *set_mode(TimberMode mode) {
+    if (!timber_set_mode(m_inst, mode)) return nullptr;
+    return this;
+  }
+
+  Instance *set_policy(TimberPolicy policy) {
+    if (!timber_set_policy(m_inst, policy)) return nullptr;
+    return this;
+  }
+
+  Instance *set_format(const char *format) {
+    if (!timber_set_format(m_inst, format)) return nullptr;
+    return this;
+  }
+
+  Instance *add_stderr() {
+    if (!timber_add_stderr_sink(m_inst)) return nullptr;
+    return this;
+  }
+
+  Instance *add_stdout() {
+    if (!timber_add_stdout_sink(m_inst)) return nullptr;
+    return this;
   }
 
 private:

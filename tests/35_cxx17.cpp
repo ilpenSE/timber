@@ -1,8 +1,8 @@
 #include <timber.hpp>
 
 int main() {
-  timber::Timber inst(TIMBER_BLOCK_POLICY, "$T $L: $M");
-  inst.add_sink(stdout);
+  timber::Instance inst(TIMBER_BLOCK_POLICY);
+  inst.add_stdout()->set_format("$T $L: $M");
   if (!inst.init()) {
     return 1;
   }
