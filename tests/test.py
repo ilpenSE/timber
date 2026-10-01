@@ -112,7 +112,7 @@ def get_compiler(platform, is_cxx):
 def get_flags_from_variant(variant):
   match variant:
     case "O0": return ["-O0"]
-    case "O3": return ["-O3"]
+    case "O3": return ["-O3", "-DNDEBUG", "-DTIMBER_RELEASE"]
     case "ASAN":
       return ["-fno-omit-frame-pointer",
               "-fno-sanitize-recover=undefined",

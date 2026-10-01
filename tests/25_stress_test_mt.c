@@ -64,11 +64,12 @@ int main(void) {
     total_elapsed_ns += threads[i].elapsed_ns;
   }
 
-  printf("Total elapsed: %" PRId64" ns\n", total_elapsed_ns);
-  printf("Total elapsed time per call: %lf ns\n", (double)total_elapsed_ns/(MESSAGES_PER_THREAD*THREAD_COUNT));
-  printf("Total dropped messages: %zu\n", total_dropped);
+  char buf[1024*1024];
+  printf("Total elapsed: %s ns\n", fmt_thousands(total_elapsed_ns));
+  printf("Total elapsed time per call: %s ns\n", fmt_thousandsf((double)total_elapsed_ns/(MESSAGES_PER_THREAD*THREAD_COUNT), 2));
+  printf("Total dropped messages: %s\n", fmt_thousands(total_dropped));
   double throughput = (double)(MESSAGES_PER_THREAD * THREAD_COUNT) / (total_elapsed_ns * 1e-9);
-  printf("Throughput: %lf log/sec\n", throughput);
+  printf("Throughput: %s log/sec\n", fmt_thousandsf(throughput, 2));
 
   if (!timber_destroy(timber)) return 2;
   return 0;
