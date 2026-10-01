@@ -43,7 +43,11 @@
 #define timber_atomic_load ::std::atomic_load_explicit
 #define timber_atomic_fetch_add ::std::atomic_fetch_add_explicit
 #define timber_atomic_cas_weak ::std::atomic_compare_exchange_weak_explicit
+#define timber_morder_seq_cst ::std::memory_order_seq_cst
+#define timber_atomic_exchange ::std::atomic_exchange_explicit
+#define timber_atomic_fence ::std::atomic_thread_fence
 #define TIMBER_THREAD_LOCAL thread_local
+#define TIMBER_ALIGNAS(x) alignas(x)
 
 #else
 #include <stdatomic.h>
@@ -56,7 +60,11 @@
 #define timber_atomic_load atomic_load_explicit
 #define timber_atomic_fetch_add atomic_fetch_add_explicit
 #define timber_atomic_cas_weak atomic_compare_exchange_weak_explicit
+#define timber_morder_seq_cst memory_order_seq_cst
+#define timber_atomic_exchange atomic_exchange_explicit
+#define timber_atomic_fence atomic_thread_fence
 #define TIMBER_THREAD_LOCAL _Thread_local
+#define TIMBER_ALIGNAS(x) _Alignas(x)
 #endif
 
 // POSIX/Windows abstraction
@@ -289,9 +297,9 @@ struct TimberSlot {
 };
 
 struct TimberQueue {
-  struct TimberSlot items[TIMBER_QUEUE_SIZE];
-  alignas(64) TIMBER_ATOMIC(size_t) head;
-  alignas(64) TIMBER_ATOMIC(size_t) tail;
+  TIMBER_ALIGNAS(64) TIMBER_ATOMIC(size_t) head;
+  TIMBER_ALIGNAS(64) TIMBER_ATOMIC(size_t) tail;
+  TIMBER_ALIGNAS(64) struct TimberSlot items[TIMBER_QUEUE_SIZE];
 };
 
 typedef enum {
@@ -320,8 +328,9 @@ struct TimberSink {
 };
 
 struct Timber {
-  alignas(64) TIMBER_ATOMIC(bool) is_alive;
   struct TimberQueue queue;
+  TIMBER_ALIGNAS(64) TIMBER_ATOMIC(bool) is_alive;
+  TIMBER_ALIGNAS(64) TIMBER_ATOMIC(int) consumer_sleeping;
   struct TimberFormat format;
   timber_pthread_t thread;
   struct TimberSink sinks[TIMBER_MAX_SINKS]; // array of fds/HANDLEs
@@ -467,6 +476,10 @@ static size_t _timber_format_msg(struct TimberFormat *format,
   return outcnt;
 }
 
+static inline bool _timber_consumer_ready(struct TimberQueue *q, size_t tail) {
+  return timber_atomic_load(&q->items[tail % TIMBER_QUEUE_SIZE].seq, timber_morder_acquire) == tail + 1;
+}
+
 static void *_timber_consumer(void *ctxptr)
 {
   _timber_debug("thread initialized");
@@ -481,14 +494,18 @@ static void *_timber_consumer(void *ctxptr)
 
   // Event loop
   while (1) {
-    // wait for ready messages
-    bool ret = timber_sem_wait(&ctx->sem_full_slots);
-    assert(ret && "sem_wait");
-    size_t head = timber_atomic_load(&q->head, timber_morder_relaxed);
     size_t tail = timber_atomic_load(&q->tail, timber_morder_relaxed);
-    if (head == tail) {
-      if (!timber_atomic_load(&ctx->is_alive, timber_morder_relaxed)) break;
-      continue;
+
+    if (!_timber_consumer_ready(q, tail)) {
+      timber_atomic_store(&ctx->consumer_sleeping, 1, timber_morder_relaxed);
+      timber_atomic_fence(timber_morder_seq_cst);
+
+      if (!_timber_consumer_ready(q, tail)) {
+        if (!timber_atomic_load(&ctx->is_alive, timber_morder_relaxed)) break;
+        timber_sem_wait(&ctx->sem_full_slots);
+        continue;
+      }
+      timber_atomic_store(&ctx->consumer_sleeping, 0, timber_morder_relaxed);
     }
 
     // Process payload
@@ -642,8 +659,13 @@ bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz)
   // set slot's seq == pos + 1 (ready signal for consumer)
   // and signal consumer thread
   timber_atomic_store(&slot->seq, pos + 1, timber_morder_release);
-  bool ret = timber_sem_post(&lg->sem_full_slots);
-  assert(ret && "sem_post(sem_full_slots)");
+  timber_atomic_fence(timber_morder_seq_cst);
+  if (timber_atomic_load(&lg->consumer_sleeping, timber_morder_relaxed) &&
+      timber_atomic_exchange(&lg->consumer_sleeping, 0, timber_morder_relaxed)) {
+    bool ret = timber_sem_post(&lg->sem_full_slots);
+    assert(ret && "sem_post(sem_full_slots)");
+  }
+
   return true;
 }
 

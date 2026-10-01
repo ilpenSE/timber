@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # WINEPATH="/usr/x86_64-w64-mingw32/bin"
-import subprocess
-import sys
+import os, sys, subprocess
 
 TESTS = {
   "10_basic": {
@@ -41,6 +40,7 @@ SINGLE_HEADER = "../build/timber.h"
 
 VARIANT = "O0"
 PLATFORM = "linux"
+TEST = "all"
 
 program_name = sys.argv[0]
 
@@ -51,12 +51,17 @@ def usage():
   print(f"    platform can be {PLATFORMS}")
   print("  --variant | -v <variant = O0>: Set target variant")
   print(f"    variant can be {VARIANTS}")
+  print("  --test | -t <test = all>: Set a specific test or all of them to run")
+  print(f"    test can be {list(TESTS.keys())}")
   print("  help: Print this help message")
 
-def run_cmd(cmd):
-  print(f"Command: { ' '.join(cmd) }")
+def run_cmd(cmd, log=True, stdout=True, stderr=True):
+  if log:
+    print(f"Command: { ' '.join(cmd) }")
   try:
-    subprocess.run(cmd, check=True)
+    stdout_param = None if stdout else subprocess.DEVNULL
+    stderr_param = None if stderr else subprocess.DEVNULL
+    subprocess.run(cmd, check=True, stdout=stdout_param, stderr=stderr_param)
   except subprocess.CalledProcessError as e:
     print(f"ERROR: Command failed with {e.returncode}")
 
@@ -69,13 +74,21 @@ argv = sys.argv[1:]
 arg = shift(argv)
 while arg is not None:
   match arg:
+    case "--test" | "-t":
+      test = shift(argv)
+      if test is not None:
+        if (not test in TESTS.keys()) and (not test == "all"):
+          print(f"ERROR: Invalid test: {test}")
+          usage()
+          exit(1)
+        TEST = test
     case "--variant" | "-v":
       variant = shift(argv)
       if variant is not None:
         if not variant in VARIANTS:
           print(f"ERROR: Invalid variant: {variant}")
-          usage()
           exit(1)
+          usage()
         VARIANT = variant
     case "--platform" | "-p":
       platform = shift(argv)
@@ -109,42 +122,55 @@ def get_flags_from_variant(variant):
 
 # Setup environment
 mkdir_cmd = ["mkdir", "-p", f"build/{PLATFORM}/{VARIANT}"]
-run_cmd(mkdir_cmd)
-run_cmd(['bash', '../aux/generate.sh'])
+run_cmd(mkdir_cmd, log=False, stdout=False)
+run_cmd(['bash', '../aux/generate.sh'], log=False, stdout=False, stderr=False)
 
-# Compile all test files with specified variant and platform
-def compile_test_all(variant, platform):
-  for file_name, opts in TESTS.items():
-    std = opts.get("std")
-    is_cxx = std.startswith("c++")
-    ext = ".cpp" if is_cxx else ".c"
+def compile_test(test, variant, platform):
+  opts = TESTS[test]
+  std = opts.get("std")
+  is_cxx = std.startswith("c++")
+  ext = ".cpp" if is_cxx else ".c"
 
-    compile_cmd = [
-      f"{get_compiler(platform, is_cxx)}",
-      "-o", f"build/{platform}/{VARIANT}/{file_name}",
-      f"{file_name}{ext}",
-      "-I../build/", "-g", "-DTIMBER_IMPLEMENTATION",
-      f"-std={std}"
-    ]
-    compile_cmd.extend(get_flags_from_variant(VARIANT))
-    if platform == "linux":
-      compile_cmd.append("-D_POSIX_C_SOURCE=200809L")
+  compile_cmd = [
+    f"{get_compiler(platform, is_cxx)}",
+    "-o", f"build/{platform}/{VARIANT}/{test}",
+    f"{test}{ext}",
+    "-I../build/", "-g", "-DTIMBER_IMPLEMENTATION",
+    f"-std={std}"
+  ]
+  compile_cmd.extend(get_flags_from_variant(VARIANT))
+  if platform == "linux":
+    compile_cmd.append("-D_POSIX_C_SOURCE=200809L")
 
-    if is_cxx:
-      compile_cmd.append("-I../bindings/c++")
-    run_cmd(compile_cmd)
+  if is_cxx:
+    compile_cmd.append("-I../bindings/c++")
+  run_cmd(compile_cmd, log=False)
 
-def run_test_all(emulator, variant, platform):
-  for file_name, opts in TESTS.items():
-    cmd = []
-    if emulator is not None:
-      cmd.append(emulator)
-    cmd.append(f"./build/{platform}/{variant}/{file_name}{'.exe' if emulator == 'wine' else ''}")
-    run_cmd(cmd)
-    print("")
+def run_test(test, emulator, variant, platform):
+  cmd = []
+  if emulator is not None:
+    cmd.append(emulator)
+  cmd.append(f"./build/{platform}/{variant}/{test}{'.exe' if emulator == 'wine' else ''}")
+  run_cmd(cmd)
+  print("")
 
-compile_test_all(VARIANT, PLATFORM)
-print("")
-print("===== RUNNING =====")
-print("")
-run_test_all(None if PLATFORM == "linux" else "wine", VARIANT, PLATFORM)
+if sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+  bash_rst = "\x1b[0m"
+  bash_grn = "\x1b[0;32m"
+  bash_ylw = "\x1b[0;33m"
+else:
+  bash_rst = ""
+  bash_grn = ""
+  bash_ylw = ""
+
+if TEST == "all":
+  print(f"{bash_ylw}Compiling...{bash_rst}", end='', flush=True)
+  for test in TESTS.keys():
+    compile_test(test, VARIANT, PLATFORM)
+  print(f" [{bash_grn}OK{bash_rst}]")
+  print(f"{bash_grn}Running all tests...{bash_rst}")
+  for test in TESTS.keys():
+    run_test(test, None if PLATFORM == "linux" else "wine", VARIANT, PLATFORM)
+else:
+  compile_test(TEST, VARIANT, PLATFORM)
+  run_test(TEST, None if PLATFORM == "linux" else "wine", VARIANT, PLATFORM)
