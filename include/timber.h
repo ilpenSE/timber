@@ -56,51 +56,6 @@
 #define TIMBER_VERSION_PATCH 0
 
 /**
- * @brief Maximum number of sinks that can be attached to a logger.
- */
-#define TIMBER_MAX_SINKS 8
-
-/**
- * @brief Maximum amount of tokens can be in single format string
- * $T, $$, $L, $M and other characters are one token
- * Not every character is counted as single token
- * For example: "$T [$L] $M" string's tokens are:
- * TK_TIME, TK_LITERAL(" ["), TK_LEVEL, TK_LITERAL("] "), TK_MESSAGE
-*/
-#define TIMBER_MAX_TOKENS 20
-
-/**
- * @brief Maximum size of a single log message.
- * @detail Message in this context is already formatted message.
- * It doesn't mean format string. Also this limitation doesn't effect
- * format on consumer (second step of formatting which is adding level)
- */
-#define TIMBER_MAX_MSG_SIZE 256
-
-/**
- * @brief Extra space for time, level and stuff in consumer.
- * @detail If your format string is too big, increase this
- * otherwise it'll truncate your message to fit format
- * time, level or other literals.
-*/
-#define TIMBER_FORMAT_EXTRA 64
-
-/**
- * @brief Maximum number of messages processed in a single batch.
- * @detail But, consumer stops batching if there's unready message on the way
- * So this is the limitation for consumer
- */
-#define TIMBER_MAX_BATCH 32
-
-/**
- * @brief Number of slots in the asynchronous MPSC queue.
- * @detail This slot includes payload which is
- * level and message (which is can be max 256 bytes long) and
- * Vyukov sequence number
- */
-#define TIMBER_QUEUE_SIZE 1024
-
-/**
  * @brief Opaque Timber logger instance.
  *
  * The internal representation is intentionally hidden because the

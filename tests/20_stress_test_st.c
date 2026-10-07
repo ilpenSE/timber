@@ -6,18 +6,20 @@
 
 int main(void) {
   Timber *timber = timber_alloc();
+#if 0
+  timber_set_policy(timber, TIMBER_BLOCK_POLICY);
+#endif
   if (!timber_init(timber)) return 1;
   struct timespec start, end;
   volatile size_t dropped = 0;
 
   get_monotonic_time(&start);
-  for (volatile long i = 0; i < MESSAGES; i++) {
+  for (long i = 0; i < MESSAGES; i++) {
     if (!timber_info(timber, "Hello, World!")) {
       dropped++;
     }
   }
   get_monotonic_time(&end);
-  char buf[1024*1024];
 
   int64_t elapsed_ns = (int64_t)(end.tv_sec - start.tv_sec) * 1000000000LL
                        + (int64_t)(end.tv_nsec - start.tv_nsec);

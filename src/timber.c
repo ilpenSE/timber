@@ -13,25 +13,6 @@
     exit(134);                            \
   } while (0)
 
-#ifdef _MSC_VER
-  #include <intrin.h>
-  #if defined(_M_X64) || defined(_M_IX86)
-    #define _TIMBER_PAUSE _mm_pause() // MSVC X86/X64 intrinsic
-  #elif defined(_M_ARM64)
-    #define _TIMBER_PAUSE __yield()  // MSVC ARM64 intrinsic
-  #else
-    #error "Unsupported MSVC platform for pause instruction"
-  #endif
-#else
-  #if defined(__x86_64__) || defined(__i386__) // amd64/x86_64 or i386/x86/x86_32
-    #define _TIMBER_PAUSE __asm__ volatile("pause" ::: "memory")
-  #elif defined(__aarch64__) // ARM64
-    #define _TIMBER_PAUSE __asm__ volatile("yield" ::: "memory")
-  #else
-    #error "No such supported platform for pause instruction"
-  #endif
-#endif
-
 #ifdef __cplusplus
 #include <atomic>
 #define TIMBER_ATOMIC(T) ::std::atomic<T>
@@ -285,6 +266,14 @@ static inline bool timber_pthread_join(timber_pthread_t *thread, void **retval)
 { return pthread_join(*thread, retval) == 0; }
 #endif // _WIN32
 
+// Config, change if you know
+#define TIMBER_MAX_MSG_SIZE 256
+#define TIMBER_FORMAT_EXTRA 64
+#define TIMBER_QUEUE_SIZE 1024
+#define TIMBER_MAX_BATCH 32
+#define TIMBER_MAX_TOKENS 20
+#define TIMBER_MAX_SINKS 8
+
 struct TimberPayload {
   char msg[TIMBER_MAX_MSG_SIZE];
   size_t msg_count;
@@ -294,6 +283,7 @@ struct TimberPayload {
 struct TimberSlot {
   struct TimberPayload payload;
   TIMBER_ATOMIC(size_t) seq;
+  char _pad[320 - sizeof(struct TimberPayload) - sizeof(size_t)];
 };
 
 struct TimberQueue {
@@ -328,17 +318,17 @@ struct TimberSink {
 };
 
 struct Timber {
-  struct TimberQueue queue;
   TIMBER_ALIGNAS(64) TIMBER_ATOMIC(bool) is_alive;
   TIMBER_ALIGNAS(64) TIMBER_ATOMIC(int) consumer_sleeping;
+  // the signal which is used for producers to signal consumer
+  TIMBER_ALIGNAS(64) timber_sem_t sem_full_slots;
+  // the signal which is used for consumer signals to producers for an empty slot (only for TIMBER_BLOCK_POLICY)
+  TIMBER_ALIGNAS(64) timber_sem_t sem_empty_slots;
+  struct TimberQueue queue;
   struct TimberFormat format;
   timber_pthread_t thread;
   struct TimberSink sinks[TIMBER_MAX_SINKS]; // array of fds/HANDLEs
   size_t sink_count;
-  // the signal which is used for producers to signal consumer
-  timber_sem_t sem_full_slots;
-  // the signal which is used for consumer signals to producers for an empty slot (only for TIMBER_BLOCK_POLICY)
-  timber_sem_t sem_empty_slots;
   // mutex and condvar for flush() barrier
   timber_mutex_t mtx_flush;
   timber_cond_t  cond_flush;
@@ -630,6 +620,17 @@ bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz)
     msgsz = TIMBER_MAX_MSG_SIZE;
   }
 
+  // Wait on sem_empty_slots first if policy is block
+  if (lg->log_policy == TIMBER_BLOCK_POLICY) {
+    bool ret = timber_sem_wait(&lg->sem_empty_slots);
+    assert(ret && "sem_wait");
+    if (!timber_atomic_load(&lg->is_alive, timber_morder_relaxed)) {
+      ret = timber_sem_post(&lg->sem_empty_slots);
+      assert(ret && "sem_post");
+      errno = EPIPE; return false;
+    }
+  }
+
   // CAS loop for claiming slot
   size_t pos;
   struct TimberSlot *slot;
@@ -642,12 +643,8 @@ bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz)
       if (timber_atomic_cas_weak(&q->head, &pos, pos + 1, timber_morder_relaxed, timber_morder_relaxed))
         break; // this producer claimed this slot
       continue; // this producer couldn't claim this slot, try again
-    } else if (seq < pos) {
-      // queue full, decide what to do by policy
-      if (lg->log_policy == TIMBER_BLOCK_POLICY) {
-        bool ret = timber_sem_wait(&lg->sem_empty_slots);
-        assert(ret && "sem_wait on producer CAS loop");
-      } else { errno = ENOBUFS; return false; }
+    } else if (seq < pos && lg->log_policy == TIMBER_DROP_POLICY) {
+      errno = ENOBUFS; return false;
     }
   }
 

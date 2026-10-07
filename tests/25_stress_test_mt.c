@@ -1,11 +1,13 @@
 #include <timber.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include "thread.h"
 #include "benchmark.h"
 
 #define THREAD_COUNT 10
 #define MESSAGES_PER_THREAD 100000
 Timber *timber;
+static _Atomic bool go = false;
 
 struct ThreadCtx {
   thread_t id;
@@ -26,8 +28,10 @@ void *thread_func(void *cp) {
   struct timespec start, end;
   volatile size_t dropped = 0;
 
+  while (!atomic_load(&go));
+
   get_monotonic_time(&start);
-  for (volatile long i = 0; i < MESSAGES_PER_THREAD; i++) {
+  for (long i = 0; i < MESSAGES_PER_THREAD; i++) {
     if (!timber_infof(timber, "[Thread %" PRIthid ", %ld] Hello, World!", id, i)) {
       dropped++;
     }
@@ -36,9 +40,11 @@ void *thread_func(void *cp) {
 
   int64_t elapsed_ns = (int64_t)(end.tv_sec - start.tv_sec) * 1000000000LL
                        + (int64_t)(end.tv_nsec - start.tv_nsec);
+  double throughput = (double)(MESSAGES_PER_THREAD) / (elapsed_ns * 1e-9);
   printf("[Thread %" PRIthid "] Total elapsed time = %" PRId64 " ns, %lf ns/call\n",
           id, elapsed_ns, (double)elapsed_ns/MESSAGES_PER_THREAD);
   printf("[Thread %" PRIthid "] Dropped messages: %zu\n", id, dropped);
+  printf("[Thread %" PRIthid "] Throughput: %s\n", id, fmt_thousandsf(throughput, 2));
   ctx->elapsed_ns = elapsed_ns;
   ctx->dropped = dropped;
   return NULL;
@@ -46,6 +52,10 @@ void *thread_func(void *cp) {
 
 int main(void) {
   timber = timber_alloc();
+#if 0
+  timber_set_policy(timber, TIMBER_BLOCK_POLICY);
+#endif
+
   if (!timber_init(timber)) return 1;
   struct ThreadCtx threads[THREAD_COUNT] = {0};
 
@@ -53,6 +63,7 @@ int main(void) {
     thread_create(&threads[i].id, NULL, thread_func, &threads[i]);
   }
 
+  atomic_store(&go, true);
   for (size_t i = 0; i < sizeof(threads)/sizeof(*threads); i++) {
     thread_join(&threads[i].id, NULL);
   }
@@ -64,7 +75,6 @@ int main(void) {
     total_elapsed_ns += threads[i].elapsed_ns;
   }
 
-  char buf[1024*1024];
   printf("Total elapsed: %s ns\n", fmt_thousands(total_elapsed_ns));
   printf("Total elapsed time per call: %s ns\n", fmt_thousandsf((double)total_elapsed_ns/(MESSAGES_PER_THREAD*THREAD_COUNT), 2));
   printf("Total dropped messages: %s\n", fmt_thousands(total_dropped));
