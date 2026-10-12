@@ -97,7 +97,7 @@ TIMBER_LEVELS
 #endif // __cplusplus
 
   Instance *add_sink(const char *file_path) {
-    if (!timber_add_file_sink(m_inst, file_path)) return nullptr;
+    if (!timber_add_file(m_inst, file_path)) return nullptr;
     return this;
   }
 
@@ -112,12 +112,12 @@ TIMBER_LEVELS
   }
 
   Instance *add_stderr() {
-    if (!timber_add_stderr_sink(m_inst)) return nullptr;
+    if (!timber_add_stderr(m_inst)) return nullptr;
     return this;
   }
 
   Instance *add_stdout() {
-    if (!timber_add_stdout_sink(m_inst)) return nullptr;
+    if (!timber_add_stdout(m_inst)) return nullptr;
     return this;
   }
 

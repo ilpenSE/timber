@@ -4,7 +4,7 @@ int main(void)
 {
   Timber *timber = timber_alloc();
   // Chain API
-  timber_set_format(timber_add_stdout_sink(timber), "$T [$L] $M");
+  timber_set_format(timber_add_stdout(timber), "$T [$L] $M");
 
   if (!timber_init(timber)) return 1;
   timber_info(timber, "Hello, World!");

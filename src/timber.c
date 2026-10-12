@@ -801,7 +801,7 @@ void timber_free(Timber *lg)
   free(lg);
 }
 
-Timber *timber_add_file_sink(Timber *lg, const char *file_path)
+Timber *timber_add_file(Timber *lg, const char *file_path)
 {
   if (lg->sink_count >= TIMBER_MAX_SINKS) { errno = ERANGE; return NULL; }
 
@@ -828,7 +828,7 @@ Timber *timber_add_file_sink(Timber *lg, const char *file_path)
   return lg;
 }
 
-Timber *timber_add_stdout_sink(Timber *lg)
+Timber *timber_add_stdout(Timber *lg)
 {
   if (lg->sink_count >= TIMBER_MAX_SINKS) { errno = ERANGE; return NULL; }
 
@@ -852,7 +852,7 @@ Timber *timber_add_stdout_sink(Timber *lg)
   return lg;
 }
 
-Timber *timber_add_stderr_sink(Timber *lg)
+Timber *timber_add_stderr(Timber *lg)
 {
   if (lg->sink_count >= TIMBER_MAX_SINKS) { errno = ERANGE; return NULL; }
 

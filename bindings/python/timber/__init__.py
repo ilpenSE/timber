@@ -37,9 +37,9 @@ bool timber_logn(Timber *lg, TimberLevel level, const char *msg, size_t msgsz);
 bool timber_log(Timber *lg, TimberLevel level, const char *msg);
 
 bool timber_flush(Timber *lg);
-Timber *timber_add_file_sink(Timber *lg, const char *file_path);
-Timber *timber_add_stdout_sink(Timber *lg);
-Timber *timber_add_stderr_sink(Timber *lg);
+Timber *timber_add_file(Timber *lg, const char *file_path);
+Timber *timber_add_stdout(Timber *lg);
+Timber *timber_add_stderr(Timber *lg);
 Timber *timber_set_policy(Timber *lg, TimberPolicy policy);
 Timber *timber_set_format(Timber *lg, const char *format);
 
@@ -156,16 +156,16 @@ class Timber:
     return self
 
   def add_file(self, path) -> "Timber":
-    if not _native.timber_add_file_sink(self._config_ptr(), os.fsencode(path)):
+    if not _native.timber_add_file(self._config_ptr(), os.fsencode(path)):
       raise OSError("failed to add file sink")
     return self
 
   def add_stdout(self) -> "Timber":
-    if not _native.timber_add_stdout_sink(self._config_ptr()):
+    if not _native.timber_add_stdout(self._config_ptr()):
       raise OSError("failed to add stdout sink")
     return self
 
   def add_stderr(self) -> "Timber":
-    if not _native.timber_add_stderr_sink(self._config_ptr()):
+    if not _native.timber_add_stderr(self._config_ptr()):
       raise OSError("failed to add stderr sink")
     return self

@@ -293,9 +293,7 @@ TIMBER_API const char *timber_level_to_cstr(TimberLevel level);
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API Timber *timber_add_file_sink(Timber *lg, const char *file_path);
-/** @brief Alias for timber_add_file_sink */
-#define timber_add_file timber_add_file_sink
+TIMBER_API Timber *timber_add_file(Timber *lg, const char *file_path);
 
 /**
  * @brief Adds stdout as a logging sink.
@@ -306,9 +304,7 @@ TIMBER_API Timber *timber_add_file_sink(Timber *lg, const char *file_path);
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API Timber *timber_add_stdout_sink(Timber *lg);
-/** @brief Alias for timber_add_stdout_sink */
-#define timber_add_stdout timber_add_stdout_sink
+TIMBER_API Timber *timber_add_stdout(Timber *lg);
 
 /**
  * @brief Adds stderr as a logging sink.
@@ -319,9 +315,7 @@ TIMBER_API Timber *timber_add_stdout_sink(Timber *lg);
  * @note DO NOT use this after initialization of the instance!
  * **THREAD-UNSAFE**
  */
-TIMBER_API Timber *timber_add_stderr_sink(Timber *lg);
-/** @brief Alias for timber_add_stderr_sink */
-#define timber_add_stderr timber_add_stderr_sink
+TIMBER_API Timber *timber_add_stderr(Timber *lg);
 
 /**
  * @brief Sets the queue-full policy of a logger.
