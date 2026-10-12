@@ -53,6 +53,18 @@ doxygen
 - For PDF: You have to have pdflatex and texlive tools installed in your system. Then run Makefile in `docs/latex`
 - For XML: Open `docs/html/index.xml` in your browser or any XML editor.
 
+## Bindings
+
+- Official bindings is in this repository: [C++](./bindings/c++) and [Python](./bindings/python)
+- For documentation, go to relevant file for that binding
+
+### C++
+- Copy [timber.hpp](./bindings/c++/timber.hpp) and [timber.h](./include/timber.h) into your include path and use `timber.h`! (Don't forget to link or use single-header one for `timber.h` and define `TIMBER_IMPLEMENTATION`)
+
+### Python
+- there's already pre-built package in GitHub Releases. Install the `.whl` file in release and then run `pip install timber-X.X.X-py3-none-any.whl` in virtual environment. Then you're ready to go, import `timber` package in script.
+- To build the package on your own, first of all you have to use [./pack.sh](./aux/pack.sh) tool to build the library for all platforms and archs. Then, run `./update-so.sh` in the binding folder. You need to have `build` package (which can be installed by `pip install build`) and then run `python -m build` in binding folder. (`./bindings/python`, where pyproject.toml is located) This will create whl and tarball in `dist/` folder.
+
 ## Tests
 
 - Tests are located in `tests` folder.
