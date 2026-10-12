@@ -6,7 +6,7 @@
 
 #define THOUSANDS_SEP '.'
 #define DECIMAL_SEP   ','
-static char g_temp[1024*1024];
+_Thread_local static char g_temp[1024*1024];
 
 static inline const char *fmt_thousandsf(double v, int decimals)
 {

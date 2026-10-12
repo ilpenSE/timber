@@ -113,9 +113,6 @@ static inline bool timber_sem_init(timber_sem_t *sem, int pshared, unsigned int 
 static inline bool timber_sem_wait(timber_sem_t *sem)
 { return WaitForSingleObject(*sem, INFINITE) == WAIT_OBJECT_0; }
 
-static inline bool timber_sem_trywait(timber_sem_t *sem)
-{ return WaitForSingleObject(*sem, INFINITE) == WAIT_OBJECT_0; }
-
 static inline bool timber_sem_post(timber_sem_t *sem)
 { return ReleaseSemaphore(*sem, 1, NULL) != 0; }
 
@@ -193,16 +190,13 @@ static int _timber_win32_error_to_cerrno() {
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <sys/uio.h>
-
 typedef pthread_t timber_pthread_t;
 typedef pthread_attr_t timber_pthread_attr_t;
 typedef pthread_mutex_t timber_mutex_t;
 typedef pthread_cond_t timber_cond_t;
 typedef pthread_mutexattr_t timber_mutexattr_t;
 typedef pthread_condattr_t timber_condattr_t;
-typedef sem_t timber_sem_t;
 typedef int timber_fd_t;
 typedef struct iovec timber_iovec;
 
@@ -235,6 +229,52 @@ static inline bool timber_cond_destroy(timber_cond_t *cond)
 static inline bool timber_cond_signal(timber_cond_t *cond)
 { return pthread_cond_signal(cond) == 0; }
 
+// Pthreads
+static inline bool timber_pthread_create(timber_pthread_t *thread,
+                                         const timber_pthread_attr_t *attr,
+                                         timber_thread_fn_t start_routine,
+                                         void *arg)
+{ return pthread_create(thread, attr, start_routine, arg) == 0; }
+
+static inline bool timber_pthread_join(timber_pthread_t *thread, void **retval)
+{ return pthread_join(*thread, retval) == 0; }
+
+#if defined(__APPLE__) && defined(__MACH__)
+#include <dispatch/dispatch.h>
+typedef dispatch_semaphore_t timber_sem_t;
+
+// Apple's Shitty Ass Semaphore API
+static inline bool timber_sem_init(timber_sem_t *s, int pshared, unsigned int v)
+{
+  (void)pshared; // assume pshared = 0
+  dispatch_semaphore_t sema = dispatch_semaphore_create(v);
+  if (sema == NULL) { return false; }
+  *s = sema;
+  return true;
+}
+
+static inline bool timber_sem_destroy(timber_sem_t *s)
+{
+  dispatch_release(*s);
+  return true;
+}
+
+static inline bool timber_sem_post(timber_sem_t *s)
+{
+  dispatch_semaphore_signal(*s);
+  return true;
+}
+
+static inline bool timber_sem_wait(timber_sem_t *s)
+{
+  dispatch_semaphore_wait(*s, DISPATCH_TIME_FOREVER);
+  return true;
+}
+
+#else
+#include <semaphore.h>
+typedef sem_t timber_sem_t;
+
 // Semaphores
 static inline bool timber_sem_init(timber_sem_t *s, int pshared, unsigned int v)
 { return sem_init(s, pshared, v) == 0; }
@@ -251,19 +291,8 @@ static inline bool timber_sem_post(timber_sem_t *s)
 
 static inline bool timber_sem_destroy(timber_sem_t *s)
 { return sem_destroy(s) == 0; }
+#endif // __APPLE__ && __MACH__
 
-static inline bool timber_sem_trywait(timber_sem_t *s)
-{ return sem_trywait(s) == 0; }
-
-// Pthreads
-static inline bool timber_pthread_create(timber_pthread_t *thread,
-                                         const timber_pthread_attr_t *attr,
-                                         timber_thread_fn_t start_routine,
-                                         void *arg)
-{ return pthread_create(thread, attr, start_routine, arg) == 0; }
-
-static inline bool timber_pthread_join(timber_pthread_t *thread, void **retval)
-{ return pthread_join(*thread, retval) == 0; }
 #endif // _WIN32
 
 // Config, change if you know
@@ -693,16 +722,16 @@ bool timber_init(Timber *lg)
     _timber_add_fmt_token(&lg->format, _TIMBER_TK_MESSAGE, NULL, 0);
   }
 
+  // Initialize atomics (no errors)
+  timber_atomic_init(&lg->queue.head, 0);
+  for (size_t i = 0; i < TIMBER_QUEUE_SIZE; ++i)
+    timber_atomic_init(&lg->queue.items[i].seq, i);
+
   // Create thread (error when resources aren't available)
   if (!timber_pthread_create(&lg->thread, NULL, _timber_consumer, lg)) {
     _timber_report_error("pthread_create");
     goto fail_sem_empty;
   }
-
-  // Initialize atomics (no errors)
-  timber_atomic_init(&lg->queue.head, 0);
-  for (size_t i = 0; i < TIMBER_QUEUE_SIZE; ++i)
-    timber_atomic_init(&lg->queue.items[i].seq, i);
 
   // Initialize mutex and condvar (shouldn't error out)
   ret = timber_mutex_init(&lg->mtx_flush, NULL);
