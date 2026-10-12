@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "timber"
+version = "2.0.0"
+dependencies = ["cffi"]
+
+[tool.setuptools.package-data]
+timber = ["lib/*"]

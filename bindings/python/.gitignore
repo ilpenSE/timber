@@ -2,3 +2,6 @@ __pycache__
 *.so
 *.dll
 *.dylib
+lib/*
+dist
+*.egg-info

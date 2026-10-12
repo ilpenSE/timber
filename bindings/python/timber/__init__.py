@@ -1,9 +1,19 @@
 """
-Timber Python Bindings
+Timber Python Bindings for 2.0
+First, download this folder to your workspace and then use it like this:
+```python
+from timber import Timber # if "timber" package is in the same folder
+
+t = Timber() # Allocate an instance
+t.add_stdout().set_format("$L: $M") # You can configure it before pushing any log
+t.info("Hello, World!") # Start logging stuff, it'll auto-initialize on first log
+# Python garbage collector/RAII automatically destroys it
+```
 """
 
 from cffi import FFI
 from enum import IntEnum
+import os, sys, platform, threading
 
 ffi = FFI()
 ffi.cdef("""
@@ -43,8 +53,6 @@ Timber *timber_alloc();
 void timber_free(Timber *lg);
 """)
 
-import os, sys, platform, threading
-
 m = platform.machine().lower()
 if m in ("amd64", "x86_64", "x64"):
   arch_suffix = "x86_64"
@@ -59,7 +67,7 @@ elif sys.platform == "darwin":
 else:
   lib_name = f"libtimber-{arch_suffix}.so"
 
-_real_path = os.path.join(os.path.dirname(__file__), lib_name)
+_real_path = os.path.join(f"{os.path.dirname(__file__)}/lib", lib_name)
 _native = ffi.dlopen(_real_path)
 
 class TimberLevel(IntEnum):
