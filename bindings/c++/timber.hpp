@@ -101,11 +101,6 @@ TIMBER_LEVELS
     return this;
   }
 
-  Instance *set_mode(TimberMode mode) {
-    if (!timber_set_mode(m_inst, mode)) return nullptr;
-    return this;
-  }
-
   Instance *set_policy(TimberPolicy policy) {
     if (!timber_set_policy(m_inst, policy)) return nullptr;
     return this;

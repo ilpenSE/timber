@@ -25,11 +25,6 @@ typedef enum {
 } TimberLevel;
 
 typedef enum {
-  TIMBER_SEM_ATOMICS_RING = 0,
-  _TimberMode_count,
-} TimberMode;
-
-typedef enum {
   TIMBER_DROP_POLICY = 0,
   TIMBER_BLOCK_POLICY,
   _TimberPolicy_count,
@@ -47,7 +42,6 @@ Timber *timber_add_stdout_sink(Timber *lg);
 Timber *timber_add_stderr_sink(Timber *lg);
 Timber *timber_set_policy(Timber *lg, TimberPolicy policy);
 Timber *timber_set_format(Timber *lg, const char *format);
-Timber *timber_set_mode(Timber *lg, TimberMode mode);
 
 Timber *timber_alloc();
 void timber_free(Timber *lg);
@@ -74,11 +68,6 @@ class TimberLevel(IntEnum):
   INFO    = _native.TIMBER_INFO
   ERROR   = _native.TIMBER_ERROR
   WARNING = _native.TIMBER_WARNING
-  def __str__(self):
-    return self.name
-
-class TimberMode(IntEnum):
-  SEM_ATOMICS_RING = _native.TIMBER_SEM_ATOMICS_RING
   def __str__(self):
     return self.name
 
@@ -164,11 +153,6 @@ class Timber:
   def set_policy(self, policy: TimberPolicy) -> "Timber":
     if not _native.timber_set_policy(self._config_ptr(), policy):
       raise ValueError("invalid policy")
-    return self
-
-  def set_mode(self, mode: TimberMode) -> "Timber":
-    if not _native.timber_set_mode(self._config_ptr(), mode):
-      raise ValueError("invalid mode")
     return self
 
   def add_file(self, path) -> "Timber":

@@ -114,20 +114,6 @@ typedef enum {
 } TimberLevel;
 
 /**
- * @enum TimberMode
- * @brief Logger backend/logic mode.
- * @since 2.0.0
-*/
-typedef enum {
-  /**
-  * @brief Default behavior, uses semaphores for thread synchronization,
-  * atomics for data synchronization and MPSC Vyukov lock-free ring buffer to store logs
-  */
-  TIMBER_SEM_ATOMICS_RING = 0,
-  _TimberMode_count,
-} TimberMode;
-
-/**
  * @enum TimberPolicy
  * @brief Queue-full behavior of the logger.
  */
@@ -347,19 +333,6 @@ TIMBER_API Timber *timber_add_stderr_sink(Timber *lg);
  * **THREAD-UNSAFE**
  */
 TIMBER_API Timber *timber_set_policy(Timber *lg, TimberPolicy policy);
-
-/**
- * @brief Sets the mode the working logic/backend of the logger.
- *
- * @param[in] lg Logger instance.
- * @param[in] mode Mode enumeration, @see TimberMode
- * @return Pointer to instance which passed by @p lg if succeed, NULL otherwise
- *
- * @since 2.0.0
- * @note DO NOT use this after initialization of the instance!
- * **THREAD-UNSAFE**
- */
-TIMBER_API Timber *timber_set_mode(Timber *lg, TimberMode mode);
 
 /**
  * @brief Parses format string for the logger instance.
