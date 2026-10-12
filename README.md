@@ -89,4 +89,4 @@ abstractions (time.h and pthreads/winthreads)
 
 - Author: [ilpeN](https://github.com/ilpenSE)
 - Used min C11 standart, compatible with >=C++11
-- Version: 1.3.0
+- Version: 2.0.0
